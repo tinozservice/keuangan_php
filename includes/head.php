@@ -1,6 +1,7 @@
 <?php defined('APP_ROOT') || exit('Akses langsung tidak diizinkan.'); ?>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="theme-color" content="#FFA600">
 <title><?= e($page_title ?? 'Pencatat Keuangan') ?></title>
 <meta name="description" content="<?= e($page_desc ?? '') ?>">

@@ -13,3 +13,8 @@ Options -Indexes
 <FilesMatch "^\.git">
     Require all denied
 </FilesMatch>
+
+# Tolak indeks mesin pencari (situs privat keluarga)
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive"
+</IfModule>
