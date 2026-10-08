@@ -687,6 +687,57 @@ table.data .select {
     color: var(--orange-ink);
 }
 
+/* ---------- Rekening (daftar + form) ---------- */
+.dash-section .member-list + .ws-card,
+.dash-section .ws-meta + .ws-card {
+    margin-top: 12px;
+}
+
+/* ---------- Pagination ---------- */
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.pager-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 11px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--card);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-decoration: none;
+    transition: border-color .2s ease, color .2s ease;
+}
+
+.pager-link:hover {
+    border-color: var(--orange-ink);
+    color: var(--orange-ink);
+}
+
+.pager-link.is-active {
+    background: var(--orange-soft);
+    border-color: var(--orange);
+    color: var(--orange-ink);
+    font-weight: 600;
+}
+
+.pager-link.is-disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.pager-gap {
+    color: var(--muted);
+    padding: 0 2px;
+}
+
 /* ---------- Header & navigasi ---------- */
 .site-header {
     background: var(--card);

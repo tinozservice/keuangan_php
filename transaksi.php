@@ -6,6 +6,8 @@ require __DIR__ . '/includes/init.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/workspace.php';
 require __DIR__ . '/includes/transaksi.php';
+require_once __DIR__ . '/includes/rekening.php';
+require_once __DIR__ . '/includes/pagination.php';
 
 $user = auth_require_login();
 $uid = (int) $user['id'];
@@ -33,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $type = ((string) ($_POST['type'] ?? '')) === 'masuk' ? 'masuk' : 'keluar';
         $amount = (int) preg_replace('/\D/', '', (string) ($_POST['amount'] ?? ''));
         $description = trim((string) ($_POST['description'] ?? ''));
+        $accountId = (int) ($_POST['account_id'] ?? 0);
 
         $parsed = DateTime::createFromFormat('Y-m-d', $date);
         if ($parsed === false || $parsed->format('Y-m-d') !== $date) {
@@ -41,8 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', 'Nominal harus berupa angka lebih dari 0.');
         } elseif ($description === '' || mb_strlen($description) > 200) {
             flash_set('error', 'Deskripsi wajib diisi (maksimal 200 karakter).');
+        } elseif ($accountId > 0 && !rek_exists($id, $accountId)) {
+            flash_set('error', 'Rekening tidak valid.');
         } else {
-            tx_add($id, $uid, $username, $date, $type, $amount, $description);
+            tx_add($id, $uid, $username, $date, $type, $amount, $description, $accountId > 0 ? $accountId : null);
             flash_set('ok', 'Transaksi ditambahkan.');
         }
         redirect('/transaksi.php?id=' . $id);
@@ -52,8 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/transaksi.php?id=' . $id);
 }
 
-$transactions = tx_list($id);
+$page = page_current();
+$totalTx = tx_count($id);
+$totalPages = page_total($totalTx);
+$page = min($page, $totalPages);
+$transactions = tx_list($id, PER_PAGE, page_offset($page));
 $totals = tx_totals($id);
+$accounts = rek_list($id);
 
 $page_title = 'Transaksi — ' . (string) $ws['name'];
 $page_desc = 'Daftar dan input transaksi workspace.';
@@ -113,6 +123,18 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                         </select>
                     </div>
                     <div class="field">
+                        <label for="account_id">Rekening</label>
+                        <select class="select" id="account_id" name="account_id">
+                            <option value="0">— Tanpa rekening —</option>
+                            <?php foreach ($accounts as $acc): ?>
+                            <option value="<?= (int) $acc['id'] ?>"><?= e((string) $acc['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if ($accounts === []): ?>
+                        <span class="field-hint">Belum ada rekening — tambahkan di halaman workspace.</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="field">
                         <label for="amount">Nominal (Rupiah)</label>
                         <input class="input" type="number" id="amount" name="amount" min="1" step="1" inputmode="numeric" required placeholder="cth: 50000">
                     </div>
@@ -125,7 +147,7 @@ $page_desc = 'Daftar dan input transaksi workspace.';
             </section>
 
             <section class="dash-section">
-                <h2>Daftar transaksi (<?= count($transactions) ?>)</h2>
+                <h2>Daftar transaksi (<?= $totalTx ?>)</h2>
                 <?php if ($transactions === []): ?>
                     <p class="ws-meta">Belum ada transaksi di workspace ini.</p>
                 <?php else: ?>
@@ -136,6 +158,7 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                                 <th>Tanggal</th>
                                 <th>Jenis</th>
                                 <th>Deskripsi</th>
+                                <th>Rekening</th>
                                 <th>Nominal</th>
                                 <th>Aksi</th>
                             </tr>
@@ -146,6 +169,7 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                                 <td class="mono"><?= e(date('d M Y', strtotime((string) $tx['tx_date']))) ?></td>
                                 <td><span class="badge <?= $tx['type'] === 'masuk' ? 'badge-yellow' : 'badge-orange' ?>"><?= $tx['type'] === 'masuk' ? 'Masuk' : 'Keluar' ?></span></td>
                                 <td><?= e((string) $tx['description']) ?></td>
+                                <td><?= (($tx['account_name'] ?? null) !== null) ? e((string) $tx['account_name']) : '—' ?></td>
                                 <td class="tx-amount<?= $tx['type'] === 'masuk' ? ' in' : '' ?>"><?= $tx['type'] === 'masuk' ? '+' : '-' ?><?= e(rupiah((int) $tx['amount'])) ?></td>
                                 <td>
                                     <div class="row-form">
@@ -158,6 +182,7 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                         </tbody>
                     </table>
                 </div>
+                <?php page_render(APP_BASE . '/transaksi.php?id=' . $id, $page, $totalPages); ?>
                 <?php endif; ?>
             </section>
         </div>

@@ -2,10 +2,14 @@
 /** Modul Transaksi — input manual & pengelolaan (FR-021; perubahan tercatat di log FR-032). */
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/log.php';
+require_once __DIR__ . '/pagination.php';
+require_once __DIR__ . '/rekening.php';
 
-function tx_list(int $wsId): array
+function tx_list(int $wsId, int $limit = PER_PAGE, int $offset = 0): array
 {
-    $st = db()->prepare('SELECT * FROM transactions WHERE workspace_id = ? ORDER BY tx_date DESC, id DESC');
+    $limit = max(1, $limit);
+    $offset = max(0, $offset);
+    $st = db()->prepare('SELECT t.*, a.name AS account_name FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id WHERE t.workspace_id = ? ORDER BY t.tx_date DESC, t.id DESC LIMIT ' . $limit . ' OFFSET ' . $offset);
     $st->execute([$wsId]);
     return $st->fetchAll();
 }
@@ -38,21 +42,21 @@ function tx_totals(int $wsId): array
     return ['masuk' => $masuk, 'keluar' => $keluar, 'selisih' => $masuk - $keluar];
 }
 
-function tx_add(int $wsId, int $actorId, string $actorUsername, string $date, string $type, int $amount, string $description): int
+function tx_add(int $wsId, int $actorId, string $actorUsername, string $date, string $type, int $amount, string $description, ?int $accountId = null): int
 {
     $now = date('Y-m-d H:i:s');
-    db()->prepare('INSERT INTO transactions (workspace_id, created_by, tx_date, type, amount, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        ->execute([$wsId, $actorId, $date, $type, $amount, $description, $now, $now]);
+    db()->prepare('INSERT INTO transactions (workspace_id, created_by, account_id, tx_date, type, amount, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$wsId, $actorId, $accountId, $date, $type, $amount, $description, $now, $now]);
     $id = (int) db()->lastInsertId();
-    log_write($wsId, $actorId, $actorUsername, 'tambah', 'transaksi', $id, 'Menambah transaksi ' . tx_label($type, $amount, $description));
+    log_write($wsId, $actorId, $actorUsername, 'tambah', 'transaksi', $id, 'Menambah transaksi ' . tx_label($type, $amount, $description) . tx_rek_suffix($accountId));
     return $id;
 }
 
-function tx_update(int $wsId, int $actorId, string $actorUsername, int $id, string $date, string $type, int $amount, string $description): void
+function tx_update(int $wsId, int $actorId, string $actorUsername, int $id, string $date, string $type, int $amount, string $description, ?int $accountId = null): void
 {
-    db()->prepare('UPDATE transactions SET tx_date = ?, type = ?, amount = ?, description = ?, updated_at = ? WHERE id = ? AND workspace_id = ?')
-        ->execute([$date, $type, $amount, $description, date('Y-m-d H:i:s'), $id, $wsId]);
-    log_write($wsId, $actorId, $actorUsername, 'ubah', 'transaksi', $id, 'Mengubah transaksi ' . tx_label($type, $amount, $description));
+    db()->prepare('UPDATE transactions SET account_id = ?, tx_date = ?, type = ?, amount = ?, description = ?, updated_at = ? WHERE id = ? AND workspace_id = ?')
+        ->execute([$accountId, $date, $type, $amount, $description, date('Y-m-d H:i:s'), $id, $wsId]);
+    log_write($wsId, $actorId, $actorUsername, 'ubah', 'transaksi', $id, 'Mengubah transaksi ' . tx_label($type, $amount, $description) . tx_rek_suffix($accountId));
 }
 
 function tx_delete(int $wsId, int $actorId, string $actorUsername, int $id): void
@@ -62,11 +66,22 @@ function tx_delete(int $wsId, int $actorId, string $actorUsername, int $id): voi
         return;
     }
     db()->prepare('DELETE FROM transactions WHERE id = ? AND workspace_id = ?')->execute([$id, $wsId]);
-    log_write($wsId, $actorId, $actorUsername, 'hapus', 'transaksi', $id, 'Menghapus transaksi ' . tx_label((string) $tx['type'], (int) $tx['amount'], (string) $tx['description']));
+    $accountId = ((int) ($tx['account_id'] ?? 0)) > 0 ? (int) $tx['account_id'] : null;
+    log_write($wsId, $actorId, $actorUsername, 'hapus', 'transaksi', $id, 'Menghapus transaksi ' . tx_label((string) $tx['type'], (int) $tx['amount'], (string) $tx['description']) . tx_rek_suffix($accountId));
 }
 
 /** Ringkasan singkat transaksi untuk detail log. */
 function tx_label(string $type, int $amount, string $description): string
 {
     return '[' . ($type === 'masuk' ? 'masuk' : 'keluar') . '] ' . rupiah($amount) . ' — ' . $description;
+}
+
+/** Sufiks nama rekening untuk detail log (kosong bila tanpa rekening). */
+function tx_rek_suffix(?int $accountId): string
+{
+    if ($accountId === null || $accountId <= 0) {
+        return '';
+    }
+    $name = rek_name($accountId);
+    return $name === '' ? '' : ' · rekening ' . $name;
 }

@@ -6,9 +6,12 @@ require __DIR__ . '/includes/init.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/workspace.php';
 require __DIR__ . '/includes/transaksi.php';
+require_once __DIR__ . '/includes/rekening.php';
+require_once __DIR__ . '/includes/log.php';
 
 $user = auth_require_login();
 $uid = (int) $user['id'];
+$username = (string) $user['username'];
 
 $id = (int) ($_GET['id'] ?? 0);
 $ws = $id > 0 ? ws_get($id) : null;
@@ -46,12 +49,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/workspace.php?id=' . $id);
     }
 
+    if ($aksi === 'rekening-tambah') {
+        [$ok, $message] = rek_add($id, $uid, $username, (string) ($_POST['nama_rekening'] ?? ''));
+        flash_set($ok ? 'ok' : 'error', $message);
+        redirect('/workspace.php?id=' . $id);
+    }
+
     flash_set('error', 'Aksi tidak dikenali atau Anda tidak berwenang.');
     redirect('/workspace.php?id=' . $id);
 }
 
 $members = ws_members($id);
 $txCount = tx_count($id);
+$accounts = rek_list($id);
+$logCount = log_count($id);
 $pendingInvites = $isOwner ? ws_pending_invites($id) : [];
 
 $page_title = (string) $ws['name'] . ' — Pencatat Keuangan';
@@ -92,6 +103,34 @@ $page_desc = 'Detail workspace: anggota, undangan, dan pengaturan.';
             </section>
 
             <section class="dash-section">
+                <h2>Rekening (<?= count($accounts) ?>)</h2>
+                <?php if ($accounts === []): ?>
+                    <p class="ws-meta">Belum ada rekening. Tambahkan rekening (bank, e-wallet, kas) agar transaksi dapat ditandai.</p>
+                <?php else: ?>
+                    <div class="member-list">
+                        <?php foreach ($accounts as $acc): ?>
+                        <div class="member-row">
+                            <span><i class="fa-solid fa-wallet" aria-hidden="true"></i> <?= e((string) $acc['name']) ?></span>
+                            <div class="row-form">
+                                <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/rekening-ubah.php?id=<?= (int) $acc['id'] ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> Ubah</a>
+                                <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/rekening-hapus.php?id=<?= (int) $acc['id'] ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i> Hapus…</a>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+                <form class="card ws-card" method="post" action="<?= e(APP_BASE) ?>/workspace.php?id=<?= (int) $ws['id'] ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="aksi" value="rekening-tambah">
+                    <div class="field">
+                        <label for="nama_rekening">Tambah rekening</label>
+                        <input class="input" type="text" id="nama_rekening" name="nama_rekening" maxlength="60" required placeholder="cth: BCA, Dompet Digital, Kas">
+                    </div>
+                    <button class="btn btn-ghost" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah rekening</button>
+                </form>
+            </section>
+
+            <section class="dash-section">
                 <h2>Transaksi</h2>
                 <div class="card invite-card">
                     <div>
@@ -104,6 +143,17 @@ $page_desc = 'Detail workspace: anggota, undangan, dan pengaturan.';
                         <?php endif; ?>
                     </div>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-receipt" aria-hidden="true"></i> <?= $txCount === 0 ? 'Tambah transaksi' : 'Kelola transaksi' ?></a>
+                </div>
+            </section>
+
+            <section class="dash-section">
+                <h2>Log Aktivitas</h2>
+                <div class="card invite-card">
+                    <div>
+                        <strong><?= $logCount ?> entri aktivitas</strong>
+                        <div class="ws-meta">Riwayat perubahan transaksi, rekening &amp; keanggotaan workspace.</div>
+                    </div>
+                    <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/log.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Buka log</a>
                 </div>
             </section>
 

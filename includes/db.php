@@ -88,10 +88,20 @@ function db_migrate(PDO $pdo): void
     );
 
     $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            name TEXT NOT NULL COLLATE NOCASE,
+            created_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec(
         'CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
             created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+            account_id INTEGER NULL REFERENCES accounts(id) ON DELETE SET NULL,
             tx_date TEXT NOT NULL,
             type TEXT NOT NULL DEFAULT \'keluar\',
             amount INTEGER NOT NULL DEFAULT 0,
@@ -119,6 +129,7 @@ function db_migrate(PDO $pdo): void
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_invitations_invitee ON workspace_invitations (invitee_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_logs_ws ON activity_logs (workspace_id)');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_ws_name ON accounts (workspace_id, name COLLATE NOCASE)');
 
     // --- Migrasi ringan basis data lama ---
 
@@ -157,4 +168,13 @@ function db_migrate(PDO $pdo): void
     }
 
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username COLLATE NOCASE)');
+
+    // Kolom `account_id` pada transaksi (basis data lama).
+    $txCols = [];
+    foreach ($pdo->query('PRAGMA table_info(transactions)') as $col) {
+        $txCols[(string) $col['name']] = true;
+    }
+    if (!isset($txCols['account_id'])) {
+        $pdo->exec('ALTER TABLE transactions ADD COLUMN account_id INTEGER NULL REFERENCES accounts(id) ON DELETE SET NULL');
+    }
 }

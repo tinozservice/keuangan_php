@@ -64,7 +64,7 @@ $tab_user_home = !$in_admin_area && $current_file === 'dashboard.php';
 <?php if ($header_user !== null): ?>
 <nav class="tabbar" aria-label="Navigasi aplikasi">
     <div class="wrap tabbar-inner">
-        <?php if ($is_admin): ?>
+        <?php if ($is_admin && $in_admin_area): ?>
             <a class="tab<?= $tab_admin_home ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/">Home Admin</a>
             <a class="tab<?= $tab_admin_user ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/user.php">User</a>
         <?php else: ?>

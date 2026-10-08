@@ -6,6 +6,7 @@ require __DIR__ . '/includes/init.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/workspace.php';
 require __DIR__ . '/includes/transaksi.php';
+require_once __DIR__ . '/includes/rekening.php';
 
 $user = auth_require_login();
 $uid = (int) $user['id'];
@@ -32,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $type = ((string) ($_POST['type'] ?? '')) === 'masuk' ? 'masuk' : 'keluar';
     $amount = (int) preg_replace('/\D/', '', (string) ($_POST['amount'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
+    $accountId = (int) ($_POST['account_id'] ?? 0);
 
     $parsed = DateTime::createFromFormat('Y-m-d', $date);
     if ($parsed === false || $parsed->format('Y-m-d') !== $date) {
@@ -40,12 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('error', 'Nominal harus berupa angka lebih dari 0.');
     } elseif ($description === '' || mb_strlen($description) > 200) {
         flash_set('error', 'Deskripsi wajib diisi (maksimal 200 karakter).');
+    } elseif ($accountId > 0 && !rek_exists($wsId, $accountId)) {
+        flash_set('error', 'Rekening tidak valid.');
     } else {
-        tx_update($wsId, $uid, $username, $txId, $date, $type, $amount, $description);
+        tx_update($wsId, $uid, $username, $txId, $date, $type, $amount, $description, $accountId > 0 ? $accountId : null);
         flash_set('ok', 'Transaksi diperbarui.');
     }
     redirect('/transaksi.php?id=' . $wsId);
 }
+
+$accounts = rek_list($wsId);
 
 $page_title = 'Ubah Transaksi — ' . (string) $ws['name'];
 $page_desc = 'Ubah transaksi workspace.';
@@ -76,6 +82,15 @@ $page_desc = 'Ubah transaksi workspace.';
                         <select class="select" id="type" name="type" required>
                             <option value="keluar"<?= $tx['type'] === 'keluar' ? ' selected' : '' ?>>Pengeluaran (keluar)</option>
                             <option value="masuk"<?= $tx['type'] === 'masuk' ? ' selected' : '' ?>>Pemasukan (masuk)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="account_id">Rekening</label>
+                        <select class="select" id="account_id" name="account_id">
+                            <option value="0">— Tanpa rekening —</option>
+                            <?php foreach ($accounts as $acc): ?>
+                            <option value="<?= (int) $acc['id'] ?>"<?= ((int) ($tx['account_id'] ?? 0) === (int) $acc['id']) ? ' selected' : '' ?>><?= e((string) $acc['name']) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="field">

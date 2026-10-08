@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/includes/init.php';
 require dirname(__DIR__) . '/includes/auth.php';
+require_once dirname(__DIR__) . '/includes/pagination.php';
 
 $admin = auth_require_admin();
 $adminId = (int) $admin['id'];
@@ -40,7 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/admin/user.php');
 }
 
-$users = db()->query('SELECT id, name, username, email, is_verified, role FROM users ORDER BY id ASC')->fetchAll();
+$page = page_current();
+$totalUsers = (int) db()->query('SELECT COUNT(*) AS c FROM users')->fetch()['c'];
+$totalPages = page_total($totalUsers);
+$page = min($page, $totalPages);
+$st = db()->prepare('SELECT id, name, username, email, is_verified, role FROM users ORDER BY id DESC LIMIT ' . PER_PAGE . ' OFFSET ' . page_offset($page));
+$st->execute();
+$users = $st->fetchAll();
 
 $page_title = 'Kelola Pengguna — Panel Admin';
 $page_desc = 'Daftar akun terdaftar: status verifikasi, peran, dan penghapusan.';
@@ -58,7 +65,7 @@ $page_desc = 'Daftar akun terdaftar: status verifikasi, peran, dan penghapusan.'
             <div class="dash-head">
                 <div>
                     <h1>Kelola Pengguna</h1>
-                    <p class="lead"><?= count($users) ?> akun terdaftar. Nama, username, dan email bersifat baca-saja.</p>
+                    <p class="lead"><?= $totalUsers ?> akun terdaftar. Nama, username, dan email bersifat baca-saja.</p>
                 </div>
                 <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Panel Admin</a>
             </div>
@@ -127,6 +134,7 @@ $page_desc = 'Daftar akun terdaftar: status verifikasi, peran, dan penghapusan.'
                         </tbody>
                     </table>
                 </div>
+                <?php page_render(APP_BASE . '/admin/user.php', $page, $totalPages); ?>
             </section>
         </div>
     </main>
