@@ -24,6 +24,30 @@ function mail_otp_html(string $name, string $code): string
         . '</div></div>';
 }
 
+function mail_send_invitation(string $to, string $inviteeName, string $workspaceName, string $inviterUsername): bool
+{
+    if (env('MAIL_ENABLED', 'false') !== 'true') {
+        return false;
+    }
+
+    return mail_send($to, 'Undangan workspace: ' . $workspaceName, mail_invitation_html($inviteeName, $workspaceName, $inviterUsername));
+}
+
+function mail_invitation_html(string $inviteeName, string $workspaceName, string $inviterUsername): string
+{
+    $nama = htmlspecialchars($inviteeName, ENT_QUOTES, 'UTF-8');
+    $ws = htmlspecialchars($workspaceName, ENT_QUOTES, 'UTF-8');
+    $pengundang = htmlspecialchars($inviterUsername, ENT_QUOTES, 'UTF-8');
+
+    return '<div style="background:#FFF4E9;padding:24px;font-family:Inter,Arial,sans-serif">'
+        . '<div style="max-width:480px;margin:0 auto;background:#FFFFFF;border:1px solid #F0DCC8;border-radius:6px;padding:24px">'
+        . '<p style="margin:0 0 12px;font-size:14px;color:#6B4F33">Halo ' . $nama . ',</p>'
+        . '<p style="margin:0 0 16px;font-size:14px;color:#33210F"><strong>@' . $pengundang . '</strong> mengundang Anda ke workspace <strong>' . $ws . '</strong> di Pencatat Keuangan.</p>'
+        . '<p style="margin:0 0 16px;font-size:14px;color:#33210F">Buka dashboard aplikasi untuk menerima atau menolak undangan tersebut.</p>'
+        . '<p style="margin:0;font-size:12px;color:#7E5F44">Abaikan email ini bila Anda tidak ingin bergabung.</p>'
+        . '</div></div>';
+}
+
 /** Kirim email HTML via SMTP; false bila gagal / belum dikonfigurasi. */
 function mail_send(string $to, string $subject, string $html): bool
 {

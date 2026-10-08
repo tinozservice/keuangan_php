@@ -1,5 +1,5 @@
 <?php
-/* Pencatat Keuangan — masuk dengan email & kata sandi. */
+/* Pencatat Keuangan — masuk dengan email/username & kata sandi. */
 declare(strict_types=1);
 
 require __DIR__ . '/includes/init.php';
@@ -12,17 +12,17 @@ if (auth_user() !== null) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
 
-    $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+    $ident = trim((string) ($_POST['ident'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
-    $user = auth_find_user_by_email($email);
+    $user = auth_find_user_by_email_or_username($ident);
 
     if ($user === null || !password_verify($password, (string) $user['password_hash'])) {
-        flash_set('error', 'Email atau kata sandi salah.');
+        flash_set('error', 'Email/username atau kata sandi salah.');
         redirect('/login.php');
     }
 
     if ((int) $user['is_verified'] !== 1) {
-        $_SESSION['pending_email'] = $email;
+        $_SESSION['pending_email'] = (string) $user['email'];
         flash_set('error', 'Akun belum terverifikasi. Masukkan kode OTP atau kirim ulang kode.');
         redirect('/verify.php');
     }
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $page_title = 'Masuk — Pencatat Keuangan';
-$page_desc = 'Masuk ke akun Pencatat Keuangan Anda.';
+$page_desc = 'Masuk ke akun Pencatat Keuangan Anda dengan email atau username.';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -48,13 +48,13 @@ $page_desc = 'Masuk ke akun Pencatat Keuangan Anda.';
             <section class="card auth-card">
                 <div>
                     <h1>Masuk</h1>
-                    <p class="lead">Gunakan email dan kata sandi akun Anda.</p>
+                    <p class="lead">Gunakan email atau username, lalu kata sandi akun Anda.</p>
                 </div>
                 <form class="auth-form" method="post" action="<?= e(APP_BASE) ?>/login.php" novalidate>
                     <?= csrf_field() ?>
                     <div class="field">
-                        <label for="email">Email</label>
-                        <input class="input" type="email" id="email" name="email" required autocomplete="email">
+                        <label for="ident">Email atau username</label>
+                        <input class="input" type="text" id="ident" name="ident" required autocomplete="username" value="">
                     </div>
                     <div class="field">
                         <label for="password">Kata sandi</label>

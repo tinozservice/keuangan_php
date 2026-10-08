@@ -384,6 +384,123 @@ html {
     color: var(--ink-2);
 }
 
+/* ---------- Dashboard & workspace ---------- */
+.lead {
+    font-size: 14px;
+    color: var(--ink-2);
+}
+
+.dash {
+    padding-top: clamp(24px, 4vw, 40px);
+}
+
+.dash-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 16px;
+}
+
+.dash-head h1 {
+    font-size: 24px;
+}
+
+.dash-section {
+    margin-top: 26px;
+}
+
+.dash-section h2 {
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.dash-grid {
+    display: grid;
+    gap: 14px;
+}
+
+@media (min-width: 760px) {
+    .dash-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.ws-card {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+}
+
+.ws-card h3 {
+    font-size: 16px;
+}
+
+.ws-card h3 a {
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.ws-card h3 a:hover {
+    color: var(--orange-ink);
+}
+
+.ws-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+.invite-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+}
+
+.invite-card + .invite-card {
+    margin-top: 10px;
+}
+
+.ws-actions,
+.inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.member-list {
+    display: grid;
+    gap: 8px;
+}
+
+.member-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 13.5px;
+}
+
+.stack {
+    display: grid;
+    gap: 16px;
+}
+
+.field-hint {
+    font-size: 12px;
+    color: var(--muted);
+}
+
 /* ---------- Header & navigasi ---------- */
 .site-header {
     background: var(--card);

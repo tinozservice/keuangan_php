@@ -1,5 +1,5 @@
 <?php
-/* Pencatat Keuangan — pendaftaran akun manual (Alur 1 PRD). */
+/* Pencatat Keuangan — pendaftaran akun manual (Alur 1 PRD; field: username, email, password). */
 declare(strict_types=1);
 
 require __DIR__ . '/includes/init.php';
@@ -13,20 +13,22 @@ if (auth_user() !== null) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
 
-    $name = trim((string) ($_POST['name'] ?? ''));
+    $username = strtolower(trim((string) ($_POST['username'] ?? '')));
     $email = strtolower(trim((string) ($_POST['email'] ?? '')));
     $password = (string) ($_POST['password'] ?? '');
     $confirm = (string) ($_POST['password_confirm'] ?? '');
 
     $error = null;
-    if (mb_strlen($name) < 2 || mb_strlen($name) > 80) {
-        $error = 'Nama harus 2–80 karakter.';
+    if (!preg_match('/^[a-z0-9_]{3,30}$/', $username)) {
+        $error = 'Username harus 3–30 karakter dan hanya berisi huruf kecil, angka, atau garis bawah.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Format email tidak valid.';
     } elseif (strlen($password) < 8) {
         $error = 'Kata sandi minimal 8 karakter.';
     } elseif ($password !== $confirm) {
         $error = 'Ulangi kata sandi tidak cocok.';
+    } elseif (auth_username_exists($username)) {
+        $error = 'Username sudah dipakai.';
     } elseif (auth_find_user_by_email($email) !== null) {
         $error = 'Email sudah terdaftar. Coba masuk.';
     }
@@ -36,9 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/register.php');
     }
 
-    $userId = auth_create_user($name, $email, $password);
+    $userId = auth_create_user($username, $email, $password);
     $code = auth_issue_otp($userId);
-    $sent = mail_send_otp($email, $name, $code);
+    $sent = mail_send_otp($email, $username, $code);
 
     $_SESSION['pending_email'] = $email;
     $_SESSION['otp_sent_at'] = time();
@@ -69,13 +71,14 @@ $page_desc = 'Buat akun Pencatat Keuangan untuk mulai mencatat keuangan.';
             <section class="card auth-card">
                 <div>
                     <h1>Buat akun</h1>
-                    <p class="lead">Isi data di bawah, lalu masukkan kode verifikasi yang dikirim ke email Anda.</p>
+                    <p class="lead">Pilih username, lalu verifikasi lewat kode yang dikirim ke email Anda.</p>
                 </div>
                 <form class="auth-form" method="post" action="<?= e(APP_BASE) ?>/register.php" novalidate>
                     <?= csrf_field() ?>
                     <div class="field">
-                        <label for="name">Nama</label>
-                        <input class="input" type="text" id="name" name="name" maxlength="80" required value="">
+                        <label for="username">Username</label>
+                        <input class="input" type="text" id="username" name="username" minlength="3" maxlength="30" pattern="[a-z0-9_]{3,30}" autocomplete="username" required value="">
+                        <span class="field-hint">Huruf kecil, angka, dan garis bawah (3–30 karakter).</span>
                     </div>
                     <div class="field">
                         <label for="email">Email</label>
