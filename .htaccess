@@ -1,0 +1,15 @@
+# Pencatat Keuangan — aturan Apache (shared hosting cPanel).
+# Diabaikan oleh server pengembangan `php -S` (lihat AGENTS.md).
+
+# Jangan tampilkan daftar isi direktori
+Options -Indexes
+
+# Tolak akses langsung ke berkas sensitif & dokumentasi internal
+<FilesMatch "\.(env|md|log|sqlite|sqlite3|db)$">
+    Require all denied
+</FilesMatch>
+
+# Tolak akses ke berkas meta Git
+<FilesMatch "^\.git">
+    Require all denied
+</FilesMatch>

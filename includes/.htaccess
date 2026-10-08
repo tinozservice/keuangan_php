@@ -1,0 +1,2 @@
+# Tolak akses web langsung ke berkas include PHP
+Require all denied
