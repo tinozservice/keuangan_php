@@ -3,6 +3,7 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/log.php';
 
 function ws_get(int $id): ?array
 {
@@ -56,7 +57,13 @@ function ws_delete(int $wsId): void
 
 function ws_leave(int $wsId, int $userId): void
 {
+    $st = db()->prepare('SELECT username FROM users WHERE id = ? LIMIT 1');
+    $st->execute([$userId]);
+    $row = $st->fetch();
+    $username = $row === false ? '' : (string) $row['username'];
+
     db()->prepare("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ? AND role = 'collaborator'")->execute([$wsId, $userId]);
+    log_write($wsId, $userId, $username, 'anggota-keluar', 'keanggotaan', $userId, '@' . $username . ' keluar dari workspace');
 }
 
 function ws_members(int $wsId): array
@@ -159,6 +166,13 @@ function ws_respond_invitation(int $invitationId, int $userId, string $action): 
                 ->execute([(int) $invitation['workspace_id'], $userId, $now]);
         }
         $pdo->prepare("UPDATE workspace_invitations SET status = 'accepted', responded_at = ? WHERE id = ?")->execute([$now, $invitationId]);
+
+        $stUser = db()->prepare('SELECT username FROM users WHERE id = ? LIMIT 1');
+        $stUser->execute([$userId]);
+        $rowUser = $stUser->fetch();
+        $username = $rowUser === false ? '' : (string) $rowUser['username'];
+        log_write((int) $invitation['workspace_id'], $userId, $username, 'anggota-masuk', 'keanggotaan', $userId, '@' . $username . ' bergabung sebagai kolaborator');
+
         return [true, 'Undangan diterima. Workspace kini muncul di daftar kolaborasi Anda.'];
     }
 

@@ -46,6 +46,12 @@ function e(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+/** Format angka Rupiah tanpa desimal (cth: Rp1.234.567). */
+function rupiah(int $amount): string
+{
+    return 'Rp' . number_format($amount, 0, ',', '.');
+}
+
 /** Redirect internal (selalu relatif ke APP_BASE). */
 function redirect(string $path): void
 {

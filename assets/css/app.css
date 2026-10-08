@@ -661,6 +661,32 @@ table.data .select {
     border-bottom-color: var(--orange-ink);
 }
 
+/* ---------- Statistik ringkas (transaksi) ---------- */
+.stat-grid {
+    display: grid;
+    gap: 12px;
+}
+
+@media (min-width: 640px) {
+    .stat-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.stat-grid .ws-card {
+    gap: 6px;
+}
+
+.stat-value {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.stat-value.in {
+    color: var(--orange-ink);
+}
+
 /* ---------- Header & navigasi ---------- */
 .site-header {
     background: var(--card);

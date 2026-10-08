@@ -87,8 +87,38 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            created_by INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+            tx_date TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT \'keluar\',
+            amount INTEGER NOT NULL DEFAULT 0,
+            description TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            actor_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+            actor_username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            object_type TEXT NOT NULL,
+            object_id INTEGER NULL,
+            detail TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )'
+    );
+
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_members_user ON workspace_members (user_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_invitations_invitee ON workspace_invitations (invitee_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_logs_ws ON activity_logs (workspace_id)');
 
     // --- Migrasi ringan basis data lama ---
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/includes/init.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/workspace.php';
+require __DIR__ . '/includes/transaksi.php';
 
 $user = auth_require_login();
 $uid = (int) $user['id'];
@@ -50,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $members = ws_members($id);
+$txCount = tx_count($id);
 $pendingInvites = $isOwner ? ws_pending_invites($id) : [];
 
 $page_title = (string) $ws['name'] . ' — Pencatat Keuangan';
@@ -93,9 +95,15 @@ $page_desc = 'Detail workspace: anggota, undangan, dan pengaturan.';
                 <h2>Transaksi</h2>
                 <div class="card invite-card">
                     <div>
-                        <strong>Workspace kosong</strong>
-                        <div class="ws-meta">Belum ada transaksi di workspace ini. Modul pencatatan menyusul pada tahap berikutnya.</div>
+                        <?php if ($txCount === 0): ?>
+                            <strong>Workspace kosong</strong>
+                            <div class="ws-meta">Belum ada transaksi di workspace ini.</div>
+                        <?php else: ?>
+                            <strong><?= $txCount ?> transaksi tercatat</strong>
+                            <div class="ws-meta">Kelola daftar, tambah, ubah, atau hapus transaksi workspace.</div>
+                        <?php endif; ?>
                     </div>
+                    <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-receipt" aria-hidden="true"></i> <?= $txCount === 0 ? 'Tambah transaksi' : 'Kelola transaksi' ?></a>
                 </div>
             </section>
 
