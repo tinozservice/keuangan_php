@@ -42,6 +42,37 @@ function tx_totals(int $wsId): array
     return ['masuk' => $masuk, 'keluar' => $keluar, 'selisih' => $masuk - $keluar];
 }
 
+/** Total masuk/keluar per rekening (termasuk baris "tanpa rekening") — urut nama, tanpa rekening di akhir. */
+function tx_totals_by_account(int $wsId): array
+{
+    $st = db()->prepare("SELECT
+        t.account_id,
+        a.name AS account_name,
+        COALESCE(SUM(CASE WHEN t.type = 'masuk' THEN t.amount ELSE 0 END), 0) AS total_masuk,
+        COALESCE(SUM(CASE WHEN t.type = 'keluar' THEN t.amount ELSE 0 END), 0) AS total_keluar,
+        COUNT(*) AS jumlah
+        FROM transactions t
+        LEFT JOIN accounts a ON a.id = t.account_id
+        WHERE t.workspace_id = ?
+        GROUP BY t.account_id, a.name
+        ORDER BY (t.account_id IS NULL) ASC, a.name COLLATE NOCASE ASC");
+    $st->execute([$wsId]);
+
+    $rows = [];
+    foreach ($st->fetchAll() as $row) {
+        $masuk = (int) $row['total_masuk'];
+        $keluar = (int) $row['total_keluar'];
+        $rows[] = [
+            'name' => $row['account_name'] === null ? null : (string) $row['account_name'],
+            'masuk' => $masuk,
+            'keluar' => $keluar,
+            'selisih' => $masuk - $keluar,
+            'jumlah' => (int) $row['jumlah'],
+        ];
+    }
+    return $rows;
+}
+
 function tx_add(int $wsId, int $actorId, string $actorUsername, string $date, string $type, int $amount, string $description, ?int $accountId = null): int
 {
     $now = date('Y-m-d H:i:s');

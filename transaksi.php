@@ -63,6 +63,7 @@ $totalPages = page_total($totalTx);
 $page = min($page, $totalPages);
 $transactions = tx_list($id, PER_PAGE, page_offset($page));
 $totals = tx_totals($id);
+$byAccount = tx_totals_by_account($id);
 $accounts = rek_list($id);
 
 $page_title = 'Transaksi — ' . (string) $ws['name'];
@@ -104,6 +105,42 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                         <div class="stat-value"><?= $totals['selisih'] < 0 ? '-' : '+' ?><?= e(rupiah(abs($totals['selisih']))) ?></div>
                     </div>
                 </div>
+            </section>
+
+            <section class="dash-section">
+                <h2>Rincian per rekening</h2>
+                <?php if ($byAccount === []): ?>
+                    <p class="ws-meta">Belum ada transaksi untuk dirinci.</p>
+                <?php else: ?>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                            <tr>
+                                <th>Rekening</th>
+                                <th>Masuk</th>
+                                <th>Keluar</th>
+                                <th>Selisih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($byAccount as $row): ?>
+                            <tr>
+                                <td><?= $row['name'] === null ? 'Tanpa rekening' : e((string) $row['name']) ?></td>
+                                <td class="tx-amount in">+<?= e(rupiah($row['masuk'])) ?></td>
+                                <td class="tx-amount">-<?= e(rupiah($row['keluar'])) ?></td>
+                                <td class="tx-amount"><?= $row['selisih'] < 0 ? '-' : '+' ?><?= e(rupiah(abs($row['selisih']))) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <tr class="is-total">
+                                <td>Total (semua rekening)</td>
+                                <td class="tx-amount in">+<?= e(rupiah($totals['masuk'])) ?></td>
+                                <td class="tx-amount">-<?= e(rupiah($totals['keluar'])) ?></td>
+                                <td class="tx-amount"><?= $totals['selisih'] < 0 ? '-' : '+' ?><?= e(rupiah(abs($totals['selisih']))) ?></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
             </section>
 
             <section class="dash-section">
