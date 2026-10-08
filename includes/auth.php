@@ -40,6 +40,16 @@ function auth_require_login(): array
     return $user;
 }
 
+function auth_require_admin(): array
+{
+    $user = auth_require_login();
+    if (($user['role'] ?? 'user') !== 'admin') {
+        flash_set('error', 'Halaman tersebut khusus admin.');
+        redirect('/dashboard.php');
+    }
+    return $user;
+}
+
 function auth_login_user(int $userId): void
 {
     session_regenerate_id(true);

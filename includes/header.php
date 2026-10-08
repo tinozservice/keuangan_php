@@ -25,6 +25,9 @@ $header_user = auth_user();
             </ul>
             <div class="header-actions">
                 <?php if ($header_user !== null): ?>
+                    <?php if (($header_user['role'] ?? 'user') === 'admin'): ?>
+                        <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/"><i class="fa-solid fa-user-shield" aria-hidden="true"></i> Admin</a>
+                    <?php endif; ?>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/dashboard.php"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</a>
                     <form method="post" action="<?= e(APP_BASE) ?>/logout.php">
                         <?= csrf_field() ?>

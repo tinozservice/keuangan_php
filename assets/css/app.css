@@ -501,6 +501,55 @@ html {
     color: var(--muted);
 }
 
+/* ---------- Tabel data (panel admin) ---------- */
+.table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+}
+
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+
+table.data th,
+table.data td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+table.data th {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--canvas);
+}
+
+table.data tr:last-child td {
+    border-bottom: 0;
+}
+
+table.data .select {
+    width: auto;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.row-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 /* ---------- Header & navigasi ---------- */
 .site-header {
     background: var(--card);
