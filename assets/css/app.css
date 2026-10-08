@@ -363,10 +363,6 @@ html {
     text-align: center;
 }
 
-.header-actions form {
-    display: inline-flex;
-}
-
 .meta-list {
     display: grid;
     gap: 8px;
@@ -548,6 +544,121 @@ table.data .select {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+/* ---------- Avatar dropdown (menu akun) ---------- */
+.avatar-menu {
+    position: relative;
+}
+
+.avatar-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    background: var(--card);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--ink-2);
+    font-size: 21px;
+    cursor: pointer;
+    transition: border-color .2s ease, color .2s ease;
+}
+
+.avatar-btn:hover,
+.avatar-menu.is-open .avatar-btn {
+    border-color: var(--orange-ink);
+    color: var(--orange-ink);
+}
+
+.avatar-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 60;
+    min-width: 208px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 6px;
+}
+
+.avatar-menu.is-open .avatar-dropdown {
+    display: block;
+}
+
+.avatar-dropdown a,
+.avatar-dropdown button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 10px 10px;
+    border: 0;
+    background: transparent;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.avatar-dropdown a:hover,
+.avatar-dropdown button:hover {
+    background: var(--canvas);
+    color: var(--orange-ink);
+}
+
+.avatar-dropdown form {
+    display: block;
+    margin: 0;
+}
+
+.dropdown-divider {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 6px 4px;
+}
+
+/* ---------- Tab navigasi bawah header ---------- */
+.tabbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+}
+
+.tabbar-inner {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    overflow-x: auto;
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color .2s ease, border-color .2s ease;
+}
+
+.tab:hover {
+    color: var(--orange-ink);
+}
+
+.tab.is-active {
+    color: var(--orange-ink);
+    border-bottom-color: var(--orange-ink);
 }
 
 /* ---------- Header & navigasi ---------- */

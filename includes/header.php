@@ -2,6 +2,15 @@
 defined('APP_ROOT') || exit('Akses langsung tidak diizinkan.');
 require_once __DIR__ . '/auth.php';
 $header_user = auth_user();
+
+// Deteksi halaman aktif untuk tab navigasi.
+$current_script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+$current_file = basename($current_script);
+$in_admin_area = str_contains($current_script, '/admin/');
+$is_admin = $header_user !== null && ($header_user['role'] ?? 'user') === 'admin';
+$tab_admin_home = $in_admin_area && $current_file === 'index.php';
+$tab_admin_user = $in_admin_area && in_array($current_file, ['user.php', 'user-hapus.php'], true);
+$tab_user_home = !$in_admin_area && $current_file === 'dashboard.php';
 ?>
 <a class="skip-link" href="#main">Lewati ke konten</a>
 <header class="site-header">
@@ -25,20 +34,43 @@ $header_user = auth_user();
             </ul>
             <div class="header-actions">
                 <?php if ($header_user !== null): ?>
-                    <?php if (($header_user['role'] ?? 'user') === 'admin'): ?>
+                    <?php if ($is_admin): ?>
                         <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/"><i class="fa-solid fa-user-shield" aria-hidden="true"></i> Admin</a>
                     <?php endif; ?>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/dashboard.php"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</a>
-                    <form method="post" action="<?= e(APP_BASE) ?>/logout.php">
-                        <?= csrf_field() ?>
-                        <button class="btn btn-primary btn-sm" type="submit"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Keluar</button>
-                    </form>
                 <?php else: ?>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/login.php"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Masuk</a>
                     <a class="btn btn-primary btn-sm" href="<?= e(APP_BASE) ?>/register.php"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Daftar</a>
                 <?php endif; ?>
             </div>
         </nav>
+        <?php if ($header_user !== null): ?>
+        <div class="avatar-menu">
+            <button class="avatar-btn" type="button" data-avatar-toggle aria-expanded="false" aria-haspopup="true" aria-label="Menu akun">
+                <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+            </button>
+            <div class="avatar-dropdown">
+                <a href="<?= e(APP_BASE) ?>/pengaturan.php"><i class="fa-solid fa-gear" aria-hidden="true"></i> Pengaturan Akun</a>
+                <hr class="dropdown-divider">
+                <form method="post" action="<?= e(APP_BASE) ?>/logout.php">
+                    <?= csrf_field() ?>
+                    <button type="submit"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Keluar</button>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 </header>
+<?php if ($header_user !== null): ?>
+<nav class="tabbar" aria-label="Navigasi aplikasi">
+    <div class="wrap tabbar-inner">
+        <?php if ($is_admin): ?>
+            <a class="tab<?= $tab_admin_home ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/">Home Admin</a>
+            <a class="tab<?= $tab_admin_user ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/user.php">User</a>
+        <?php else: ?>
+            <a class="tab<?= $tab_user_home ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/dashboard.php">Home</a>
+        <?php endif; ?>
+    </div>
+</nav>
+<?php endif; ?>
 <div class="wrap flash-slot"><?php flash_render(); ?></div>
