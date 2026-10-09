@@ -62,6 +62,7 @@ $page_desc = 'Masuk ke akun Pencatat Keuangan Anda dengan email atau username.';
                     </div>
                     <button class="btn btn-primary" type="submit"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Masuk</button>
                 </form>
+                <p class="form-note"><a href="<?= e(APP_BASE) ?>/lupa-password.php">Lupa kata sandi?</a></p>
                 <p class="form-note">Belum punya akun? <a href="<?= e(APP_BASE) ?>/register.php">Daftar</a></p>
             </section>
         </div>

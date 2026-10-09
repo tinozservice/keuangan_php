@@ -42,6 +42,7 @@ function ws_create(int $ownerId, string $name): int
     $pdo->prepare('INSERT INTO workspaces (owner_id, name, created_at) VALUES (?, ?, ?)')->execute([$ownerId, $name, $now]);
     $id = (int) $pdo->lastInsertId();
     $pdo->prepare("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (?, ?, 'owner', ?)")->execute([$id, $ownerId, $now]);
+    user_log_write($ownerId, 'tambah', 'workspace', 'Membuat workspace "' . $name . '"');
     return $id;
 }
 
@@ -52,7 +53,12 @@ function ws_rename(int $wsId, string $name): void
 
 function ws_delete(int $wsId): void
 {
+    $ws = ws_get($wsId);
+    if ($ws === null) {
+        return;
+    }
     db()->prepare('DELETE FROM workspaces WHERE id = ?')->execute([$wsId]);
+    user_log_write((int) $ws['owner_id'], 'hapus', 'workspace', 'Menghapus workspace "' . (string) $ws['name'] . '"');
 }
 
 function ws_leave(int $wsId, int $userId): void

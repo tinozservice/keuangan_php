@@ -28,6 +28,31 @@ function log_list(int $wsId, int $limit = PER_PAGE, int $offset = 0): array
     return $st->fetchAll();
 }
 
+/** Catat satu entri log aktivitas tingkat akun (login, buat/hapus workspace). */
+function user_log_write(int $userId, string $action, string $objectType, string $detail): void
+{
+    db()->prepare('INSERT INTO user_activity_logs (user_id, action, object_type, detail, created_at) VALUES (?, ?, ?, ?, ?)')
+        ->execute([$userId, $action, $objectType, $detail, date('Y-m-d H:i:s')]);
+}
+
+/** Jumlah entri log aktivitas sebuah akun. */
+function user_log_count(int $userId): int
+{
+    $st = db()->prepare('SELECT COUNT(*) AS c FROM user_activity_logs WHERE user_id = ?');
+    $st->execute([$userId]);
+    return (int) ($st->fetch()['c'] ?? 0);
+}
+
+/** Daftar entri log aktivitas sebuah akun — urutan menurun, berhalaman (FR-055). */
+function user_log_list(int $userId, int $limit = PER_PAGE, int $offset = 0): array
+{
+    $limit = max(1, $limit);
+    $offset = max(0, $offset);
+    $st = db()->prepare('SELECT * FROM user_activity_logs WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ' . $limit . ' OFFSET ' . $offset);
+    $st->execute([$userId]);
+    return $st->fetchAll();
+}
+
 /** Label & kelas badge untuk jenis aksi log. */
 function log_action_badge(string $action): array
 {
@@ -42,6 +67,8 @@ function log_action_badge(string $action): array
             return ['Bergabung', 'badge-yellow'];
         case 'anggota-keluar':
             return ['Keluar', 'badge-orange'];
+        case 'masuk':
+            return ['Login', 'badge-yellow'];
         default:
             return [$action, 'badge-yellow'];
     }
@@ -57,6 +84,10 @@ function log_object_label(string $objectType): string
             return 'Keanggotaan';
         case 'rekening':
             return 'Rekening';
+        case 'workspace':
+            return 'Workspace';
+        case 'akun':
+            return 'Akun';
         default:
             return $objectType;
     }

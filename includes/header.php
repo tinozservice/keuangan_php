@@ -11,6 +11,7 @@ $is_admin = $header_user !== null && ($header_user['role'] ?? 'user') === 'admin
 $tab_admin_home = $in_admin_area && $current_file === 'index.php';
 $tab_admin_user = $in_admin_area && in_array($current_file, ['user.php', 'user-hapus.php'], true);
 $tab_user_home = !$in_admin_area && $current_file === 'dashboard.php';
+$tab_user_log = !$in_admin_area && $current_file === 'aktivitas.php';
 ?>
 <a class="skip-link" href="#main">Lewati ke konten</a>
 <header class="site-header">
@@ -69,6 +70,7 @@ $tab_user_home = !$in_admin_area && $current_file === 'dashboard.php';
             <a class="tab<?= $tab_admin_user ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/user.php">User</a>
         <?php else: ?>
             <a class="tab<?= $tab_user_home ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/dashboard.php">Home</a>
+            <a class="tab<?= $tab_user_log ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/aktivitas.php">Log Aktivitas</a>
         <?php endif; ?>
     </div>
 </nav>

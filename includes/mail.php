@@ -24,6 +24,29 @@ function mail_otp_html(string $name, string $code): string
         . '</div></div>';
 }
 
+function mail_send_reset_otp(string $to, string $name, string $code): bool
+{
+    if (env('MAIL_ENABLED', 'false') !== 'true') {
+        return false;
+    }
+
+    return mail_send($to, 'Atur ulang kata sandi Pencatat Keuangan', mail_reset_html($name, $code));
+}
+
+function mail_reset_html(string $name, string $code): string
+{
+    $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    $safeCode = htmlspecialchars($code, ENT_QUOTES, 'UTF-8');
+
+    return '<div style="background:#FFF4E9;padding:24px;font-family:Inter,Arial,sans-serif">'
+        . '<div style="max-width:480px;margin:0 auto;background:#FFFFFF;border:1px solid #F0DCC8;border-radius:6px;padding:24px">'
+        . '<p style="margin:0 0 12px;font-size:14px;color:#6B4F33">Halo ' . $safeName . ',</p>'
+        . '<p style="margin:0 0 16px;font-size:14px;color:#33210F">Masukkan kode berikut untuk mengatur ulang kata sandi akun Anda. Kode berlaku 10 menit.</p>'
+        . '<p style="margin:0 0 16px;font-family:Consolas,monospace;font-size:28px;font-weight:700;letter-spacing:6px;color:#9E4E00">' . $safeCode . '</p>'
+        . '<p style="margin:0;font-size:12px;color:#7E5F44">Abaikan email ini bila Anda tidak meminta pengaturan ulang kata sandi.</p>'
+        . '</div></div>';
+}
+
 function mail_send_invitation(string $to, string $inviteeName, string $workspaceName, string $inviterUsername): bool
 {
     if (env('MAIL_ENABLED', 'false') !== 'true') {

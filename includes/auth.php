@@ -1,6 +1,7 @@
 <?php
 /** Autentikasi & verifikasi akun (sesi + OTP). */
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/log.php';
 
 function auth_user(): ?array
 {
@@ -54,6 +55,7 @@ function auth_login_user(int $userId): void
 {
     session_regenerate_id(true);
     $_SESSION['user_id'] = $userId;
+    user_log_write($userId, 'masuk', 'akun', 'Masuk ke aplikasi');
 }
 
 function auth_logout(): void
@@ -108,7 +110,7 @@ function auth_issue_otp(int $userId): string
 }
 
 /** Periksa kode OTP; kembalikan '' bila sukses atau pesan kesalahan. */
-function auth_verify_otp(int $userId, string $code): string
+function auth_verify_otp(int $userId, string $code, bool $markVerified = true): string
 {
     $code = trim($code);
     if (!preg_match('/^\d{6}$/', $code)) {
@@ -135,7 +137,9 @@ function auth_verify_otp(int $userId, string $code): string
     }
 
     $pdo = db();
-    $pdo->prepare('UPDATE users SET is_verified = 1, verified_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), $userId]);
+    if ($markVerified) {
+        $pdo->prepare('UPDATE users SET is_verified = 1, verified_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), $userId]);
+    }
     $pdo->prepare('DELETE FROM otp_codes WHERE user_id = ?')->execute([$userId]);
     return '';
 }

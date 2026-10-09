@@ -125,10 +125,24 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
+    // Log aktivitas tingkat akun (FR-055): login serta buat/hapus workspace.
+    // Tanpa FK workspace agar catatan penghapusan workspace tidak ikut terhapus.
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS user_activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            action TEXT NOT NULL,
+            object_type TEXT NOT NULL,
+            detail TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )'
+    );
+
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_members_user ON workspace_members (user_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_invitations_invitee ON workspace_invitations (invitee_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_logs_ws ON activity_logs (workspace_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_activity_logs (user_id)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_ws_name ON accounts (workspace_id, name COLLATE NOCASE)');
 
     // --- Migrasi ringan basis data lama ---
