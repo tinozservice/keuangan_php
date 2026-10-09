@@ -475,7 +475,7 @@ function ai_transcribe_model(array $model, string $filePath, string $filename, s
         'max_tokens' => 500,
     ], 120);
 
-    if ($status2 === 200 && is_array($data2) && isset($data2['choices'][0]['message']['content'])) {
+    if ($status2 === 200 && is_array($data2) && isset($data2['choices'][0]['message']['content']) && trim((string) $data2['choices'][0]['message']['content']) !== '') {
         return ['ok' => true, 'text' => (string) $data2['choices'][0]['message']['content'], 'detail' => 'HTTP 200 (input_audio)'];
     }
     $secondDetail = ai_http_error_detail($status2, is_array($data2) ? $data2 : null, $error2, $raw2);
