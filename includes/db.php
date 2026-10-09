@@ -138,11 +138,51 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
+    // Pool AI (FR-039–FR-046): provider OpenAI-compatible + model fallback.
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS ai_providers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            api_key TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS ai_models (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_id INTEGER NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+            model_id TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT \'\',
+            input_text INTEGER NOT NULL DEFAULT 0,
+            input_image INTEGER NOT NULL DEFAULT 0,
+            input_audio INTEGER NOT NULL DEFAULT 0,
+            input_file INTEGER NOT NULL DEFAULT 0,
+            output_text INTEGER NOT NULL DEFAULT 0,
+            output_audio INTEGER NOT NULL DEFAULT 0,
+            output_image INTEGER NOT NULL DEFAULT 0,
+            output_video INTEGER NOT NULL DEFAULT 0,
+            price_in REAL NOT NULL DEFAULT 0,
+            price_out REAL NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            priority INTEGER NOT NULL DEFAULT 0,
+            health_status TEXT NULL,
+            health_detail TEXT NULL,
+            health_checked_at TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_members_user ON workspace_members (user_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_invitations_invitee ON workspace_invitations (invitee_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_logs_ws ON activity_logs (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_activity_logs (user_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON ai_models (provider_id)');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_models_unique ON ai_models (provider_id, model_id COLLATE NOCASE)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_ws_name ON accounts (workspace_id, name COLLATE NOCASE)');
 
     // --- Migrasi ringan basis data lama ---
@@ -194,5 +234,18 @@ function db_migrate(PDO $pdo): void
     }
     if (!isset($txCols['account_id'])) {
         $pdo->exec('ALTER TABLE transactions ADD COLUMN account_id INTEGER NULL REFERENCES accounts(id) ON DELETE SET NULL');
+    }
+
+    // Normalisasi prioritas model pool AI ke jarak 10 (aturan pengguna, sekali jalan via user_version).
+    $aiSchemaVersion = (int) $pdo->query('PRAGMA user_version')->fetchColumn();
+    if ($aiSchemaVersion < 1) {
+        $aiIds = $pdo->query('SELECT id FROM ai_models ORDER BY priority ASC, id ASC')->fetchAll(PDO::FETCH_COLUMN);
+        $aiUpdate = $pdo->prepare('UPDATE ai_models SET priority = ? WHERE id = ?');
+        $aiPosition = 1;
+        foreach ($aiIds as $aiRowId) {
+            $aiUpdate->execute([$aiPosition * 10, (int) $aiRowId]);
+            $aiPosition++;
+        }
+        $pdo->exec('PRAGMA user_version = 1');
     }
 }

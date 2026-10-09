@@ -38,12 +38,19 @@ $page_desc = 'Panel admin Pencatat Keuangan.';
                             <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/user.php">Buka</a>
                         </div>
                     </article>
+                    <article class="card ws-card">
+                        <h3><a href="<?= e(APP_BASE) ?>/admin/ai.php">Pool AI</a></h3>
+                        <div class="ws-meta">Provider OpenAI-compatible, model fallback (kapabilitas &amp; harga token), urutan prioritas, dan pemeriksaan kesehatan massal.</div>
+                        <div class="ws-actions">
+                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai.php">Buka</a>
+                        </div>
+                    </article>
                 </div>
             </section>
 
             <section class="dash-section">
                 <h2>Menyusul</h2>
-                <p class="ws-meta">Pengelolaan pool AI, pemeriksaan kesehatan model, usage per model (USD), dan kurs USD→IDR akan hadir pada tahap berikutnya sesuai PRD.</p>
+                <p class="ws-meta">Halaman usage per model (USD), kurs USD→IDR, dan orkestrasi pemanggilan AI akan hadir pada tahap berikutnya sesuai PRD.</p>
             </section>
         </div>
     </main>
