@@ -91,6 +91,22 @@ $page_desc = 'Detail workspace: anggota, undangan, dan pengaturan.';
             </div>
 
             <section class="dash-section">
+                <h2>Transaksi</h2>
+                <div class="card invite-card">
+                    <div>
+                        <?php if ($txCount === 0): ?>
+                            <strong>Workspace kosong</strong>
+                            <div class="ws-meta">Belum ada transaksi di workspace ini.</div>
+                        <?php else: ?>
+                            <strong><?= $txCount ?> transaksi tercatat</strong>
+                            <div class="ws-meta">Kelola daftar, tambah, ubah, atau hapus transaksi workspace.</div>
+                        <?php endif; ?>
+                    </div>
+                    <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-receipt" aria-hidden="true"></i> <?= $txCount === 0 ? 'Tambah transaksi' : 'Kelola transaksi' ?></a>
+                </div>
+            </section>
+
+            <section class="dash-section">
                 <h2>Anggota (<?= count($members) ?>)</h2>
                 <div class="member-list">
                     <?php foreach ($members as $m): ?>
@@ -128,22 +144,6 @@ $page_desc = 'Detail workspace: anggota, undangan, dan pengaturan.';
                     </div>
                     <button class="btn btn-ghost" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah rekening</button>
                 </form>
-            </section>
-
-            <section class="dash-section">
-                <h2>Transaksi</h2>
-                <div class="card invite-card">
-                    <div>
-                        <?php if ($txCount === 0): ?>
-                            <strong>Workspace kosong</strong>
-                            <div class="ws-meta">Belum ada transaksi di workspace ini.</div>
-                        <?php else: ?>
-                            <strong><?= $txCount ?> transaksi tercatat</strong>
-                            <div class="ws-meta">Kelola daftar, tambah, ubah, atau hapus transaksi workspace.</div>
-                        <?php endif; ?>
-                    </div>
-                    <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-receipt" aria-hidden="true"></i> <?= $txCount === 0 ? 'Tambah transaksi' : 'Kelola transaksi' ?></a>
-                </div>
             </section>
 
             <section class="dash-section">
