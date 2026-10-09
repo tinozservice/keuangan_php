@@ -2,10 +2,9 @@
 
 Aplikasi web pencatat keuangan **privat keluarga**: mencatat pemasukan/pengeluaran di dalam **workspace** — dipakai sendiri atau bersama anggota keluarga terdaftar. Dibangun dengan **PHP native + SQLite**, tanpa framework dan tanpa dependensi runtime (tanpa Composer/npm), berjalan di shared hosting cPanel.
 
-- **Produksi:** `https://domain-anda.example/` (deploy manual via FTP FileZilla, tanpa staging)
+- **Deploy:** shared hosting cPanel (PHP 8.2 + SQLite), diunggah manual via FTP — alamat produksi tidak dipublikasikan
 - **Situs privat:** anti-indeks crawler di tiga lapis — `robots.txt` (`Disallow: /`), meta `noindex, nofollow, noarchive`, dan header `X-Robots-Tag`
-- **PRD:** salinan kerja terbaru `obsidian/01-PRD/PRD — Pencatat Keuangan.md`; arsip beku `keuangan-PRD.md` (root)
-- **Dokumentasi internal:** `AGENTS.md`, `INSTRUCTIONS.md`, dan catatan Vault di `obsidian/` (Hub + Log Progres)
+- **PRD:** `keuangan-PRD.md` (root)
 
 ## Fitur Utama
 
@@ -82,9 +81,6 @@ Ekstensi PHP yang dibutuhkan: `pdo_sqlite`, `curl`, `mbstring`, `fileinfo`, `ope
 ├─ includes/              # pustaka inti: init, env, db, auth, csrf, mail, google, workspace,
 │                         #   transaksi, rekening, pagination, log, ai, ekspor, geo + partial head/header/footer
 ├─ storage/               # SQLite (akses web ditolak lewat .htaccess)
-├─ tools/                 # skrip deploy lokal (tidak di-deploy)
-├─ obsidian/              # dokumentasi Vault: PRD kerja, arsitektur, log progres
-├─ referensi-desain/      # contoh desain (tidak di-deploy)
 ├─ .htaccess              # aturan Apache produksi (blokir berkas sensitif, anti-indeks)
 ├─ robots.txt             # Disallow: /
 └─ keuangan-PRD.md        # arsip PRD (beku, tidak diubah)
@@ -101,21 +97,11 @@ Ekstensi PHP yang dibutuhkan: `pdo_sqlite`, `curl`, `mbstring`, `fileinfo`, `ope
 
 ## Deploy Produksi (FTP Manual)
 
-Panduan lengkap: `obsidian/02-Architecture/Panduan Deploy FTP — Produksi.md`.
-
-```powershell
-# Tampilkan daftar berkas yang perlu diunggah sejak deploy terakhir
-powershell -NoProfile -File tools\deploy-list.ps1
-
-# Perbarui paket deploy (..\paket-deploy) + tandai commit terakhir yang di-deploy
-powershell -NoProfile -File tools\deploy-list.ps1 -Sync
-```
-
-- Unggah **hanya berkas yang tercantum** via FileZilla, pertahankan struktur folder.
-- **Jangan pernah menimpa `storage/keuangan.sqlite` di produksi** (berisi data nyata) — perubahan skema dimigrasi otomatis oleh aplikasi.
+- Unggah berkas runtime yang berubah via FTP, pertahankan struktur folder.
+- **Jangan pernah menimpa `storage/keuangan.sqlite` di produksi** (berisi data nyata) — perubahan skema dimigrasi otomatis oleh aplikasi saat request pertama.
 - `.env` hanya diperbarui bila kredensial/konfigurasi berubah.
-- Tidak ikut di-deploy: `README.md`, `AGENTS.md`, `INSTRUCTIONS.md`, `keuangan-PRD.md`, `obsidian/`, `tools/`, `referensi-desain/`, `.env.example`, `.git/`.
+- Berkas dokumentasi (`README.md`, `keuangan-PRD.md`) dan konfigurasi lokal tidak ikut di-deploy.
 
 ## Lisensi & Privasi
 
-Proyek privat keluarga — bukan untuk distribusi publik. Jangan menambahkan pengecualian indeks crawler pada `robots.txt`, meta halaman, maupun `.htaccess` (halaman yang dirayapi crawler dapat memicu pemakaian API AI berbiaya).
+Aplikasi privat keluarga — data & alamat produksi tidak dipublikasikan. Repositori ini tidak memuat kredensial maupun konfigurasi produksi; seluruh rahasia berada di `.env` lokal (tidak di-commit). Jangan menambahkan pengecualian indeks crawler pada `robots.txt`, meta halaman, maupun `.htaccess` (halaman yang dirayapi crawler dapat memicu pemakaian API AI berbiaya).

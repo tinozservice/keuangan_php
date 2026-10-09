@@ -31,10 +31,15 @@ Desktop.ini
 # /uploads/
 referensi-desain/
 
-obsidian/.obsidian
 .env
 .env.*
 !.env.example
+
+# --- Dokumentasi & alat internal (tidak dipublikasikan) ---
+obsidian/
+AGENTS.md
+INSTRUCTIONS.md
+tools/
 
 *.zip
 *.tmp
