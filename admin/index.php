@@ -39,6 +39,13 @@ $page_desc = 'Panel admin Pencatat Keuangan.';
                         </div>
                     </article>
                     <article class="card ws-card">
+                        <h3><a href="<?= e(APP_BASE) ?>/admin/login-gagal.php">Percobaan Masuk</a></h3>
+                        <div class="ws-meta">Log percobaan masuk ke identifier yang belum terdaftar, lengkap dengan lokasi &amp; IP address.</div>
+                        <div class="ws-actions">
+                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/login-gagal.php">Buka</a>
+                        </div>
+                    </article>
+                    <article class="card ws-card">
                         <h3><a href="<?= e(APP_BASE) ?>/admin/ai.php">Pool AI</a></h3>
                         <div class="ws-meta">Provider OpenAI-compatible, model fallback (kapabilitas &amp; harga token), urutan prioritas, dan pemeriksaan kesehatan massal.</div>
                         <div class="ws-actions">

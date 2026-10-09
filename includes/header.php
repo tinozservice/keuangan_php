@@ -10,6 +10,7 @@ $in_admin_area = str_contains($current_script, '/admin/');
 $is_admin = $header_user !== null && ($header_user['role'] ?? 'user') === 'admin';
 $tab_admin_home = $in_admin_area && $current_file === 'index.php';
 $tab_admin_user = $in_admin_area && in_array($current_file, ['user.php', 'user-hapus.php'], true);
+$tab_admin_login = $in_admin_area && $current_file === 'login-gagal.php';
 $tab_admin_ai = $in_admin_area && in_array($current_file, ['ai.php', 'ai-provider.php', 'ai-model.php', 'ai-hapus.php', 'ai-kesehatan.php'], true);
 $tab_admin_usage = $in_admin_area && $current_file === 'ai-usage.php';
 $tab_admin_kurs = $in_admin_area && $current_file === 'ai-kurs.php';
@@ -71,6 +72,7 @@ $tab_user_log = !$in_admin_area && $current_file === 'aktivitas.php';
         <?php if ($is_admin && $in_admin_area): ?>
             <a class="tab<?= $tab_admin_home ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/">Home Admin</a>
             <a class="tab<?= $tab_admin_user ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/user.php">User</a>
+            <a class="tab<?= $tab_admin_login ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/login-gagal.php"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Percobaan Masuk</a>
             <a class="tab<?= $tab_admin_ai ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/ai.php">Pool AI</a>
             <a class="tab<?= $tab_admin_usage ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/ai-usage.php">Usage</a>
             <a class="tab<?= $tab_admin_kurs ? ' is-active' : '' ?>" href="<?= e(APP_BASE) ?>/admin/ai-kurs.php">Kurs</a>

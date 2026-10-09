@@ -18,6 +18,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = auth_find_user_by_email_or_username($ident);
 
     if ($user === null || !password_verify($password, (string) $user['password_hash'])) {
+        // FR-060: identifier tak terdaftar dicatat dengan user_id NULL agar tetap terlacak.
+        user_log_failed_login(
+            $user === null ? null : (int) $user['id'],
+            $user === null ? $ident : (string) $user['email'],
+            $user === null
+                ? 'Percobaan login gagal — identifier tidak terdaftar'
+                : 'Percobaan login gagal — kata sandi salah'
+        );
         flash_set('error', 'Email/username atau kata sandi salah.');
         redirect('/login.php');
     }

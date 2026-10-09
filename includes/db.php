@@ -126,16 +126,30 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
-    // Log aktivitas tingkat akun (FR-055): login serta buat/hapus workspace.
+    // Log aktivitas tingkat akun (FR-055, FR-059–FR-060): login (berhasil & gagal),
+    // pembuatan/penghapusan workspace, plus IP, lokasi, dan identifier percobaan gagal.
+    // `user_id` NULL untuk percobaan login dengan identifier yang tak terdaftar.
     // Tanpa FK workspace agar catatan penghapusan workspace tidak ikut terhapus.
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS user_activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
             action TEXT NOT NULL,
             object_type TEXT NOT NULL,
             detail TEXT NOT NULL,
+            identifier TEXT NULL,
+            ip_address TEXT NULL,
+            location TEXT NULL,
             created_at TEXT NOT NULL
+        )'
+    );
+
+    // Cache geolokasi IP per alamat (FR-059): satu panggilan untuk tiap IP.
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS ip_locations (
+            ip TEXT PRIMARY KEY,
+            location TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
         )'
     );
 
@@ -265,6 +279,35 @@ function db_migrate(PDO $pdo): void
     }
     if (!isset($txCols['account_id'])) {
         $pdo->exec('ALTER TABLE transactions ADD COLUMN account_id INTEGER NULL REFERENCES accounts(id) ON DELETE SET NULL');
+    }
+
+    // Log aktivitas akun: IP, lokasi, identifier (FR-059–FR-060).
+    // SQLite tidak dapat melonggarkan NOT NULL → tabel dibangun ulang sekali jalan.
+    $ulogCols = [];
+    foreach ($pdo->query('PRAGMA table_info(user_activity_logs)') as $col) {
+        $ulogCols[(string) $col['name']] = true;
+    }
+    if (!isset($ulogCols['ip_address'])) {
+        $pdo->exec('PRAGMA foreign_keys = OFF');
+        $pdo->exec(
+            'CREATE TABLE user_activity_logs_rebuild (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+                action TEXT NOT NULL,
+                object_type TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                identifier TEXT NULL,
+                ip_address TEXT NULL,
+                location TEXT NULL,
+                created_at TEXT NOT NULL
+            )'
+        );
+        $pdo->exec('INSERT INTO user_activity_logs_rebuild (id, user_id, action, object_type, detail, created_at)
+            SELECT id, user_id, action, object_type, detail, created_at FROM user_activity_logs');
+        $pdo->exec('DROP TABLE user_activity_logs');
+        $pdo->exec('ALTER TABLE user_activity_logs_rebuild RENAME TO user_activity_logs');
+        $pdo->exec('PRAGMA foreign_keys = ON');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_activity_logs (user_id)');
     }
 
     // Normalisasi prioritas model pool AI ke jarak 10 (aturan pengguna, sekali jalan via user_version).

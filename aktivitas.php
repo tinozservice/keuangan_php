@@ -32,7 +32,7 @@ $page_desc = 'Riwayat aktivitas akun Anda: masuk aplikasi, pembuatan, dan pengha
             <div class="dash-head">
                 <div>
                     <h1>Log Aktivitas</h1>
-                    <p class="lead">Riwayat akun Anda: masuk aplikasi serta pembuatan dan penghapusan workspace.</p>
+                    <p class="lead">Riwayat akun Anda: masuk aplikasi serta pembuatan dan penghapusan workspace — tiap baris memuat lokasi &amp; IP address pelaku (FR-059).</p>
                 </div>
                 <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/dashboard.php"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</a>
             </div>
@@ -50,6 +50,8 @@ $page_desc = 'Riwayat aktivitas akun Anda: masuk aplikasi, pembuatan, dan pengha
                                 <th>Aksi</th>
                                 <th>Objek</th>
                                 <th>Detail</th>
+                                <th>Lokasi</th>
+                                <th>IP Address</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -60,6 +62,8 @@ $page_desc = 'Riwayat aktivitas akun Anda: masuk aplikasi, pembuatan, dan pengha
                                 <td><span class="badge <?= e($actionBadge) ?>"><?= e($actionLabel) ?></span></td>
                                 <td><?= e(log_object_label((string) $entry['object_type'])) ?></td>
                                 <td><?= e((string) $entry['detail']) ?></td>
+                                <td><?= e((string) ($entry['location'] ?? '') !== '' ? (string) $entry['location'] : '—') ?></td>
+                                <td class="mono"><?= e((string) ($entry['ip_address'] ?? '') !== '' ? (string) $entry['ip_address'] : '—') ?></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
