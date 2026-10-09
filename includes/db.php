@@ -158,6 +158,9 @@ function db_migrate(PDO $pdo): void
     if (!isset($userCols['username'])) {
         $pdo->exec('ALTER TABLE users ADD COLUMN username TEXT NULL');
     }
+    if (!isset($userCols['google_id'])) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN google_id TEXT NULL');
+    }
 
     // Isi username yang kosong (dari awalan email, dijamin unik).
     $rows = $pdo->query("SELECT id, email FROM users WHERE username IS NULL OR username = ''")->fetchAll();
@@ -182,6 +185,7 @@ function db_migrate(PDO $pdo): void
     }
 
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username COLLATE NOCASE)');
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users (google_id)');
 
     // Kolom `account_id` pada transaksi (basis data lama).
     $txCols = [];

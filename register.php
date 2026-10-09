@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/includes/init.php';
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/mail.php';
+require_once __DIR__ . '/includes/google.php';
 
 if (auth_user() !== null) {
     redirect('/dashboard.php');
@@ -94,6 +95,12 @@ $page_desc = 'Buat akun Pencatat Keuangan untuk mulai mencatat keuangan.';
                     </div>
                     <button class="btn btn-primary" type="submit"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Daftar</button>
                 </form>
+                <?php if (google_oauth_enabled()): ?>
+                <p class="form-note">atau</p>
+                <div class="auth-form">
+                    <a class="btn btn-ghost" href="<?= e(APP_BASE) ?>/google-login.php"><i class="fa-brands fa-google" aria-hidden="true"></i> Daftar dengan Google</a>
+                </div>
+                <?php endif; ?>
                 <p class="form-note">Sudah punya akun? <a href="<?= e(APP_BASE) ?>/login.php">Masuk</a></p>
             </section>
         </div>
