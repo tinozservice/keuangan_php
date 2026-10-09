@@ -570,7 +570,7 @@ function ai_pool_chat(array $messages, string $inputCap = 'text', array $options
         [$status, $data, $error] = ai_http_json('POST', rtrim((string) $m['base_url'], '/') . '/chat/completions', (string) $m['api_key'], $payload, $timeout);
         $latency = (int) round((microtime(true) - $start) * 1000);
 
-        if ($status === 200 && is_array($data) && isset($data['choices'][0]['message']['content'])) {
+        if ($status === 200 && is_array($data) && isset($data['choices'][0]['message']['content']) && trim((string) $data['choices'][0]['message']['content']) !== '') {
             ai_usage_record($m, 'chat', 'ok', (int) ($data['usage']['prompt_tokens'] ?? 0), (int) ($data['usage']['completion_tokens'] ?? 0), $latency);
             return ['ok' => true, 'content' => (string) $data['choices'][0]['message']['content'], 'model' => (string) $m['model_id'], 'attempts' => $attempts, 'message' => ''];
         }
@@ -747,35 +747,64 @@ function ai_json_from_text(string $content): ?array
     return is_array($data) ? $data : null;
 }
 
-/** Normalisasi isian hasil ekstraksi; bagian tidak valid diisi null (FR-024). */
+/** Normalisasi isian hasil ekstraksi; toleran terhadap alias kunci (ID/EN) & format nilai umum. */
 function ai_extract_normalize(array $raw): array
 {
+    $pick = static function (array $data, array $keys): string {
+        foreach ($data as $key => $value) {
+            if (!in_array(mb_strtolower(trim((string) $key)), $keys, true)) {
+                continue;
+            }
+            if (is_array($value)) {
+                $value = implode(' ', array_map('strval', $value));
+            }
+            $text = trim((string) $value);
+            if ($text !== '' && strtolower($text) !== 'null') {
+                return $text;
+            }
+        }
+        return '';
+    };
+
     $out = ['tanggal' => null, 'jenis' => null, 'nominal' => null, 'deskripsi' => null, 'rekening' => null];
 
-    $tanggal = trim((string) ($raw['tanggal'] ?? ''));
+    // Tanggal: terima Y-m-d, d/m/Y, d-m-Y (konvensi Indonesia).
+    $tanggal = $pick($raw, ['tanggal', 'date', 'tgl']);
     if ($tanggal !== '') {
         $parsed = DateTime::createFromFormat('Y-m-d', $tanggal);
         if ($parsed !== false && $parsed->format('Y-m-d') === $tanggal) {
             $out['tanggal'] = $tanggal;
+        } elseif (preg_match('#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$#', $tanggal, $m) === 1) {
+            $out['tanggal'] = sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
+            $check = DateTime::createFromFormat('Y-m-d', (string) $out['tanggal']);
+            if ($check === false || $check->format('Y-m-d') !== $out['tanggal']) {
+                $out['tanggal'] = null;
+            }
         }
     }
 
-    $jenis = strtolower(trim((string) ($raw['jenis'] ?? '')));
-    if ($jenis === 'masuk' || $jenis === 'keluar') {
-        $out['jenis'] = $jenis;
+    // Jenis: masuk/keluar + sinonimnya.
+    $jenis = mb_strtolower($pick($raw, ['jenis', 'type', 'tipe', 'kategori', 'category']));
+    if (str_contains($jenis, 'masuk') || str_contains($jenis, 'pemasukan') || $jenis === 'income') {
+        $out['jenis'] = 'masuk';
+    } elseif (str_contains($jenis, 'keluar') || str_contains($jenis, 'pengeluaran') || $jenis === 'expense') {
+        $out['jenis'] = 'keluar';
     }
 
-    $nominal = (string) preg_replace('/\D/', '', (string) ($raw['nominal'] ?? ''));
+    // Nominal: ambil digit saja ("Rp 27.000" -> 27000).
+    $nominal = (string) preg_replace('/\D/', '', $pick($raw, ['nominal', 'amount', 'total', 'jumlah', 'nilai', 'harga']));
     if ($nominal !== '' && (int) $nominal > 0 && (int) $nominal <= 999999999999) {
         $out['nominal'] = (int) $nominal;
     }
 
-    $deskripsi = trim((string) ($raw['deskripsi'] ?? ''));
+    // Deskripsi.
+    $deskripsi = $pick($raw, ['deskripsi', 'description', 'keterangan', 'catatan', 'note', 'memo']);
     if ($deskripsi !== '') {
         $out['deskripsi'] = mb_substr($deskripsi, 0, 200);
     }
 
-    $rekening = trim((string) ($raw['rekening'] ?? ''));
+    // Rekening.
+    $rekening = $pick($raw, ['rekening', 'account', 'akun', 'dompet', 'wallet']);
     if ($rekening !== '') {
         $out['rekening'] = mb_substr($rekening, 0, 60);
     }
@@ -796,6 +825,8 @@ function ai_extract_prompt(string $text, array $accountNames = []): string
         . 'Hari ini: ' . date('Y-m-d') . '. Gunakan format tanggal YYYY-MM-DD (konversi kata seperti "hari ini"/"kemarin"). '
         . 'Nilai uang dalam Rupiah, tulis sebagai angka tanpa titik/koma (cth: "25 ribu" = 25000). '
         . 'Jenis hanya "masuk" atau "keluar". Bila suatu bagian tidak yakin, isi null. '
+        . 'Baca HANYA dari informasi/gambar yang diberikan — jangan mengarang. Jika bukan struk/bukan informasi transaksi atau tidak terbaca, isi SEMUA field null. '
+        . 'Gunakan PERSIS kunci berikut (jangan diterjemahkan ke bahasa lain): tanggal, jenis, nominal, deskripsi, rekening. '
         . $accountLine
         . "Balas HANYA JSON dengan bentuk: {\"tanggal\":null,\"jenis\":null,\"nominal\":null,\"deskripsi\":null,\"rekening\":null}\n\n"
         . 'Informasi: ' . $text;

@@ -119,6 +119,13 @@
                 .then(function (payload) {
                     if (payload && payload.ok) {
                         aiFill(payload.fields);
+                        var filled = payload.fields ? ['tanggal', 'jenis', 'nominal', 'deskripsi', 'rekening_id'].filter(function (key) {
+                            return payload.fields[key] !== null && payload.fields[key] !== undefined && payload.fields[key] !== '';
+                        }).length : 0;
+                        if (filled === 0) {
+                            aiSetStatus('Model tidak mengisi isian apa pun — coba lagi dengan rekaman/foto lebih jelas, atau isi manual.', 'error');
+                            return;
+                        }
                         var extra = payload.transcript ? ' Terdengar: "' + payload.transcript + '".' : '';
                         aiSetStatus('Berhasil diproses oleh model ' + (payload.model || '-') + '.' + extra + ' Periksa isian lalu simpan.', 'ok');
                     } else {
