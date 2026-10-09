@@ -262,4 +262,123 @@
             });
         }
     }
+
+    /* --- Pencarian bahasa alami: prompt teks & suara (FR-027–FR-031) --- */
+    var aiSearch = document.querySelector('[data-ai-search]');
+
+    if (aiSearch) {
+        var searchEndpoint = aiSearch.getAttribute('data-endpoint') || '';
+        var searchInput = document.getElementById('ai_cari');
+        var searchGo = aiSearch.querySelector('[data-ai-search-go]');
+        var searchMic = aiSearch.querySelector('[data-ai-search-mic]');
+        var searchMicLabel = aiSearch.querySelector('[data-ai-search-mic-label]');
+        var searchStatus = aiSearch.querySelector('[data-ai-search-status]');
+        var searchToken = document.querySelector('input[name="csrf_token"]');
+        var searchWsId = '';
+        var searchQIdx = searchEndpoint.indexOf('?');
+        if (searchQIdx >= 0) { searchWsId = new URLSearchParams(searchEndpoint.slice(searchQIdx + 1)).get('id') || ''; }
+        var searchRecorder = null;
+        var searchChunks = [];
+        var searchBusy = false;
+
+        var searchSetStatus = function (message, kind) {
+            if (!searchStatus) { return; }
+            searchStatus.textContent = message;
+            searchStatus.classList.remove('is-error', 'is-ok');
+            if (kind) { searchStatus.classList.add(kind === 'error' ? 'is-error' : 'is-ok'); }
+        };
+        var searchSetBusy = function (state) {
+            searchBusy = state;
+            if (searchGo) { searchGo.disabled = state; }
+            if (searchMic) { searchMic.disabled = state; }
+        };
+        var searchApply = function (payload) {
+            var filter = payload.filter || {};
+            var parts = [];
+            if (searchWsId) { parts.push('id=' + encodeURIComponent(searchWsId)); }
+            if (filter.dari) { parts.push('dari=' + encodeURIComponent(filter.dari)); }
+            if (filter.sampai) { parts.push('sampai=' + encodeURIComponent(filter.sampai)); }
+            if (filter.q) { parts.push('q=' + encodeURIComponent(filter.q)); }
+            if (filter.rekening_id) { parts.push('rekening=' + encodeURIComponent(filter.rekening_id)); }
+            var extra = payload.transcript ? ' (Terdengar: "' + payload.transcript + '")' : '';
+            searchSetStatus('Filter ditemukan' + extra + ' — memuat daftar transaksi…', 'ok');
+            var base = searchEndpoint.split('?')[0];
+            window.location.href = base.replace('transaksi-cari-ai.php', 'transaksi.php') + '?' + parts.join('&');
+        };
+        var searchPost = function (data) {
+            if (!searchEndpoint || !searchToken) {
+                searchSetStatus('Formulir pencarian tidak siap.', 'error');
+                return;
+            }
+            data.append('csrf_token', searchToken.value);
+            searchSetBusy(true);
+            searchSetStatus('Memproses permintaan…');
+            fetch(searchEndpoint, { method: 'POST', body: data, credentials: 'same-origin' })
+                .then(function (res) {
+                    return res.json().catch(function () {
+                        return { ok: false, message: 'Respons server tidak valid (HTTP ' + res.status + ').' };
+                    });
+                })
+                .then(function (payload) {
+                    if (payload && payload.ok) {
+                        searchApply(payload);
+                    } else {
+                        searchSetStatus((payload && payload.message) ? payload.message : 'Gagal memproses permintaan.', 'error');
+                    }
+                })
+                .catch(function () { searchSetStatus('Koneksi gagal.', 'error'); })
+                .then(function () { searchSetBusy(false); });
+        };
+
+        if (searchGo) {
+            searchGo.addEventListener('click', function () {
+                if (searchBusy) { return; }
+                var text = searchInput ? searchInput.value.trim() : '';
+                if (text === '') { searchSetStatus('Tulis permintaan pencarian dulu.', 'error'); return; }
+                var data = new FormData();
+                data.append('jenis', 'teks');
+                data.append('teks', text);
+                searchPost(data);
+            });
+        }
+
+        if (searchMic) {
+            searchMic.addEventListener('click', function () {
+                if (searchBusy) { return; }
+                if (searchRecorder && searchRecorder.state === 'recording') { searchRecorder.stop(); return; }
+                if (!navigator.mediaDevices || !window.MediaRecorder) {
+                    searchSetStatus('Peramban ini tidak mendukung rekaman suara.', 'error');
+                    return;
+                }
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+                    searchChunks = [];
+                    searchRecorder = new MediaRecorder(stream);
+                    searchRecorder.addEventListener('dataavailable', function (event) {
+                        if (event.data && event.data.size > 0) { searchChunks.push(event.data); }
+                    });
+                    searchRecorder.addEventListener('stop', function () {
+                        stream.getTracks().forEach(function (track) { track.stop(); });
+                        if (searchMicLabel) { searchMicLabel.textContent = 'Cari dengan suara'; }
+                        searchMic.setAttribute('aria-pressed', 'false');
+                        searchMic.classList.remove('btn-primary');
+                        searchMic.classList.add('btn-ghost');
+                        if (searchChunks.length === 0) { searchSetStatus('Tidak ada audio terekam.', 'error'); return; }
+                        var blob = new Blob(searchChunks, { type: searchRecorder.mimeType || 'audio/webm' });
+                        aiToWav(blob, function (wavBlob, ext) {
+                            var data = new FormData();
+                            data.append('jenis', 'suara');
+                            data.append('berkas', wavBlob, 'cari.' + ext);
+                            searchPost(data);
+                        });
+                    });
+                    searchRecorder.start();
+                    searchMic.setAttribute('aria-pressed', 'true');
+                    if (searchMicLabel) { searchMicLabel.textContent = 'Stop rekaman'; }
+                    searchMic.classList.remove('btn-ghost');
+                    searchMic.classList.add('btn-primary');
+                    searchSetStatus('Sedang merekam… tekan tombol lagi untuk berhenti.', 'ok');
+                }).catch(function () { searchSetStatus('Izin mikrofon ditolak atau tidak tersedia.', 'error'); });
+            });
+        }
+    }
 })();

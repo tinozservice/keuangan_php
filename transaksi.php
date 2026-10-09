@@ -231,6 +231,15 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                         <label for="q">Kata kunci deskripsi</label>
                         <input class="input" type="text" id="q" name="q" maxlength="100" value="<?= e((string) $filter['q']) ?>" placeholder="cth: listrik">
                     </div>
+                    <div class="field">
+                        <label for="rekening">Rekening</label>
+                        <select class="select" id="rekening" name="rekening">
+                            <option value="0">— Semua rekening —</option>
+                            <?php foreach ($accounts as $acc): ?>
+                            <option value="<?= (int) $acc['id'] ?>"<?= (int) $filter['rekening'] === (int) $acc['id'] ? ' selected' : '' ?>><?= e((string) $acc['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <div class="inline-actions">
                         <button class="btn btn-primary btn-sm" type="submit"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Cari</button>
                         <?php if ($filterExplicit): ?>
@@ -243,6 +252,18 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                     <p class="field-hint">Sedang menampilkan semua transaksi. <a href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>">Kembali ke bawaan (24 jam)</a></p>
                     <?php endif; ?>
                 </form>
+                <div class="card ws-card" data-ai-search data-endpoint="<?= e(APP_BASE) ?>/transaksi-cari-ai.php?id=<?= (int) $ws['id'] ?>">
+                    <div class="field">
+                        <label for="ai_cari">Cari dengan AI (ketik atau ucapkan)</label>
+                        <input class="input" type="text" id="ai_cari" maxlength="200" placeholder="cth: carikan semua pengeluaran tanggal 2 oktober pada rekening Ibu">
+                        <span class="field-hint">Contoh: "semua pengeluaran bulan lalu rekening Kas Rumah" — hasil mengisi filter di atas secara otomatis.</span>
+                    </div>
+                    <div class="inline-actions">
+                        <button class="btn btn-ghost btn-sm" type="button" data-ai-search-go><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Cari dengan AI</button>
+                        <button class="btn btn-ghost btn-sm" type="button" data-ai-search-mic aria-pressed="false"><i class="fa-solid fa-microphone" aria-hidden="true"></i> <span data-ai-search-mic-label>Cari dengan suara</span></button>
+                    </div>
+                    <span class="field-hint" data-ai-search-status></span>
+                </div>
             </section>
 
             <section class="dash-section">

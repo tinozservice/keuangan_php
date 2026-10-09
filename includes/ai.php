@@ -898,3 +898,95 @@ function ai_extract_from_image(string $path, string $mime, array $accounts = [])
     $fields['rekening_id'] = ai_extract_match_account($accounts, (string) ($fields['rekening'] ?? ''));
     return ['ok' => true, 'fields' => $fields, 'message' => '', 'model' => (string) $res['model']];
 }
+
+// ---------------- Pencarian bahasa alami (FR-027–FR-031) ----------------
+
+/** Normalisasi filter hasil model menjadi parameter pencarian (fungsi murni). */
+function ai_search_normalize(array $raw, array $accounts = []): array
+{
+    $pick = static function (array $data, array $keys): string {
+        foreach ($data as $key => $value) {
+            if (!in_array(mb_strtolower(trim((string) $key)), $keys, true)) {
+                continue;
+            }
+            if (is_array($value)) {
+                $value = implode(' ', array_map('strval', $value));
+            }
+            $text = trim((string) $value);
+            if ($text !== '' && strtolower($text) !== 'null') {
+                return $text;
+            }
+        }
+        return '';
+    };
+    $parseDate = static function (string $text): ?string {
+        if ($text === '') {
+            return null;
+        }
+        $parsed = DateTime::createFromFormat('Y-m-d', $text);
+        if ($parsed !== false && $parsed->format('Y-m-d') === $text) {
+            return $text;
+        }
+        if (preg_match('#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$#', $text, $m) === 1) {
+            $candidate = sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
+            $check = DateTime::createFromFormat('Y-m-d', $candidate);
+            return ($check !== false && $check->format('Y-m-d') === $candidate) ? $candidate : null;
+        }
+        return null;
+    };
+
+    $dari = $parseDate($pick($raw, ['dari', 'from', 'tanggal_dari', 'mulai']));
+    $sampai = $parseDate($pick($raw, ['sampai', 'to', 'tanggal_sampai', 'hingga']));
+    if ($dari !== null && $sampai === null) {
+        $sampai = $dari;
+    }
+    if ($sampai !== null && $dari === null) {
+        $dari = $sampai;
+    }
+    if ($dari !== null && $sampai !== null && $dari > $sampai) {
+        [$dari, $sampai] = [$sampai, $dari];
+    }
+
+    $q = $pick($raw, ['q', 'kata_kunci', 'keyword', 'query', 'deskripsi']);
+    $q = $q === '' ? null : mb_substr($q, 0, 100);
+    $rekeningNama = $pick($raw, ['rekening', 'account', 'akun', 'dompet', 'wallet']);
+
+    return [
+        'dari' => $dari,
+        'sampai' => $sampai,
+        'q' => $q,
+        'rekening_id' => ai_extract_match_account($accounts, $rekeningNama),
+        'rekening' => $rekeningNama === '' ? null : $rekeningNama,
+    ];
+}
+
+/** Ubah permintaan pencarian (teks) menjadi filter via pool AI (FR-027–FR-031). */
+function ai_search_from_text(string $request, array $accounts = []): array
+{
+    $accountNames = array_values(array_filter(array_map(static fn (array $a): string => (string) $a['name'], $accounts)));
+    $accountLine = $accountNames === []
+        ? ''
+        : 'Rekening yang tersedia: ' . implode(', ', $accountNames) . '. Bila disebut salah satunya, isi "rekening" dengan nama PERSIS dari daftar; jika tidak, isi null. ';
+    $prompt = 'Ubah permintaan pencarian transaksi keuangan berikut menjadi JSON filter. '
+        . 'Hari ini: ' . date('Y-m-d') . '. '
+        . 'Field "dari"/"sampai": rentang tanggal YYYY-MM-DD (satu hari → isi keduanya sama; konversi "hari ini", "kemarin", "bulan lalu", dst.). '
+        . 'Field "q": kata kunci deskripsi atau null. '
+        . $accountLine
+        . 'Bila tidak dapat diterjemahkan menjadi filter, isi semua field null. Baca HANYA dari permintaan — jangan mengarang. '
+        . "Balas HANYA JSON: {\"dari\":null,\"sampai\":null,\"q\":null,\"rekening\":null}\n\n"
+        . 'Permintaan: ' . $request;
+
+    $res = ai_pool_chat([['role' => 'user', 'content' => $prompt]], 'text', ['max_tokens' => 250]);
+    if (!$res['ok']) {
+        return ['ok' => false, 'filter' => null, 'message' => $res['message'], 'model' => ''];
+    }
+    $parsed = ai_json_from_text((string) $res['content']);
+    if ($parsed === null) {
+        return ['ok' => false, 'filter' => null, 'message' => 'Model tidak mengembalikan JSON filter yang valid.', 'model' => (string) $res['model']];
+    }
+    $filter = ai_search_normalize($parsed, $accounts);
+    if ($filter['dari'] === null && $filter['sampai'] === null && $filter['q'] === null && $filter['rekening_id'] === null) {
+        return ['ok' => false, 'filter' => null, 'message' => 'Permintaan tidak dapat diterjemahkan menjadi filter. Silakan gunakan filter manual.', 'model' => (string) $res['model']];
+    }
+    return ['ok' => true, 'filter' => $filter, 'message' => '', 'model' => (string) $res['model']];
+}

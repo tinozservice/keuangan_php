@@ -5,7 +5,7 @@ require_once __DIR__ . '/log.php';
 require_once __DIR__ . '/pagination.php';
 require_once __DIR__ . '/rekening.php';
 
-/** Normalisasi filter pencarian manual (FR-030): dari/sampai (Y-m-d) + kata kunci q. */
+/** Normalisasi filter pencarian manual (FR-030): dari/sampai (Y-m-d) + kata kunci q + rekening. */
 function tx_filter_from_query(array $query): array
 {
     $valid = static function (string $d): bool {
@@ -16,6 +16,7 @@ function tx_filter_from_query(array $query): array
     $dari = trim((string) ($query['dari'] ?? ''));
     $sampai = trim((string) ($query['sampai'] ?? ''));
     $q = trim((string) ($query['q'] ?? ''));
+    $rekening = (int) ($query['rekening'] ?? 0);
 
     if ($dari !== '' && !$valid($dari)) {
         $dari = '';
@@ -30,7 +31,7 @@ function tx_filter_from_query(array $query): array
         $q = mb_substr($q, 0, 100);
     }
 
-    return ['dari' => $dari, 'sampai' => $sampai, 'q' => $q];
+    return ['dari' => $dari, 'sampai' => $sampai, 'q' => $q, 'rekening' => $rekening > 0 ? $rekening : 0];
 }
 
 /** True bila minimal satu filter pencarian aktif. */
@@ -38,7 +39,8 @@ function tx_filter_active(array $filter): bool
 {
     return (string) ($filter['dari'] ?? '') !== ''
         || (string) ($filter['sampai'] ?? '') !== ''
-        || (string) ($filter['q'] ?? '') !== '';
+        || (string) ($filter['q'] ?? '') !== ''
+        || (int) ($filter['rekening'] ?? 0) > 0;
 }
 
 /** Klausa WHERE + parameter terikat untuk filter transaksi (prepared statement). */
@@ -50,6 +52,7 @@ function tx_filter_sql(array $filter, int $wsId): array
     $dari = (string) ($filter['dari'] ?? '');
     $sampai = (string) ($filter['sampai'] ?? '');
     $q = (string) ($filter['q'] ?? '');
+    $rekening = (int) ($filter['rekening'] ?? 0);
 
     if ($dari !== '') {
         $where .= ' AND t.tx_date >= ?';
@@ -62,6 +65,10 @@ function tx_filter_sql(array $filter, int $wsId): array
     if ($q !== '') {
         $where .= " AND t.description LIKE ? ESCAPE '\\'";
         $params[] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+    }
+    if ($rekening > 0) {
+        $where .= ' AND t.account_id = ?';
+        $params[] = $rekening;
     }
 
     return [$where, $params];
@@ -80,6 +87,13 @@ function tx_filter_label(array $filter): string
     if ((string) ($filter['q'] ?? '') !== '') {
         $parts[] = 'kata kunci "' . (string) $filter['q'] . '"';
     }
+    $rekening = (int) ($filter['rekening'] ?? 0);
+    if ($rekening > 0) {
+        $name = rek_name($rekening);
+        if ($name !== '') {
+            $parts[] = 'rekening ' . $name;
+        }
+    }
     return implode(' · ', $parts);
 }
 
@@ -92,6 +106,10 @@ function tx_filter_query(array $filter): array
         if ($value !== '') {
             $out[$key] = $value;
         }
+    }
+    $rekening = (int) ($filter['rekening'] ?? 0);
+    if ($rekening > 0) {
+        $out['rekening'] = $rekening;
     }
     return $out;
 }
