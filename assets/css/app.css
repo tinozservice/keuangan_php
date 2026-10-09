@@ -430,6 +430,10 @@ html {
     .dash-grid {
         grid-template-columns: 1fr 1fr;
     }
+
+    .dash-grid--auto {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
 }
 
 .ws-card {
