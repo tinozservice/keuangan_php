@@ -27,6 +27,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($backUrl);
     }
 
+    if ($aksi === 'uji') {
+        [$healthStatus, $healthDetail] = ai_health_check_model($modelId);
+        flash_set(
+            $healthStatus === 'ok' ? 'ok' : 'error',
+            'Uji model "' . (string) $model['model_id'] . '": ' . ($healthStatus === 'ok' ? 'SEHAT (HTTP 200).' : 'BERMASALAH — ' . $healthDetail)
+        );
+        redirect($backUrl);
+    }
     if ($aksi === 'toggle') {
         ai_model_toggle($modelId);
         flash_set('ok', 'Model "' . (string) $model['model_id'] . '" ' . ((int) $model['is_active'] === 1 ? 'dinonaktifkan — dilewati pada percobaan fallback.' : 'diaktifkan — ikut pada percobaan fallback.'));
@@ -189,6 +197,14 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
                         </div>
                         <?php endif; ?>
                         <div class="inline-actions">
+                            <form method="post" action="<?= e(APP_BASE) ?>/admin/ai.php">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="aksi" value="uji">
+                                <input type="hidden" name="model_id" value="<?= $modelRowId ?>">
+                                <input type="hidden" name="hal" value="<?= $modelPage ?>">
+                                <input type="hidden" name="halp" value="<?= $providerPage ?>">
+                                <button class="btn btn-ghost btn-sm" type="submit"><i class="fa-solid fa-vial" aria-hidden="true"></i> Uji</button>
+                            </form>
                             <form method="post" action="<?= e(APP_BASE) ?>/admin/ai.php">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="aksi" value="toggle">

@@ -426,17 +426,23 @@ function ai_health_ping_audio(string $base, string $apiKey, string $model): arra
     return ['error', ai_http_error_detail($status, is_array($data) ? $data : null, '')];
 }
 
+/** Uji satu model (tombol Uji/selektif) & simpan hasil terakhir (FR-045). Kembalikan [status, detail]. */
+function ai_health_check_model(int $modelId): array
+{
+    [$status, $detail] = ai_health_ping($modelId);
+    db()->prepare('UPDATE ai_models SET health_status = ?, health_detail = ?, health_checked_at = ? WHERE id = ?')
+        ->execute([$status, $detail, date('Y-m-d H:i:s'), $modelId]);
+    return [$status, $detail];
+}
+
 /** Periksa semua model aktif sekaligus (FR-043) & simpan hasil terakhir (FR-045). */
 function ai_health_check_all(): array
 {
-    $pdo = db();
-    $models = $pdo->query('SELECT id FROM ai_models WHERE is_active = 1 ORDER BY priority ASC, id ASC')->fetchAll();
+    $models = db()->query('SELECT id FROM ai_models WHERE is_active = 1 ORDER BY priority ASC, id ASC')->fetchAll();
     $ok = 0;
     $error = 0;
-    $st = $pdo->prepare('UPDATE ai_models SET health_status = ?, health_detail = ?, health_checked_at = ? WHERE id = ?');
     foreach ($models as $row) {
-        [$status, $detail] = ai_health_ping((int) $row['id']);
-        $st->execute([$status, $detail, date('Y-m-d H:i:s'), (int) $row['id']]);
+        [$status] = ai_health_check_model((int) $row['id']);
         if ($status === 'ok') {
             $ok++;
         } else {
@@ -444,4 +450,241 @@ function ai_health_check_all(): array
         }
     }
     return ['total' => count($models), 'ok' => $ok, 'error' => $error];
+}
+
+// ---------------- Orkestrasi pool & pencatatan pemakaian (FR-025, FR-047) ----------------
+
+/** Kandidat model aktif untuk kapabilitas input tertentu (urut prioritas fallback). */
+function ai_pool_candidates(string $inputCap = 'text', bool $requireOutputText = true): array
+{
+    $valid = ['text', 'image', 'audio', 'file'];
+    if (!in_array($inputCap, $valid, true)) {
+        $inputCap = 'text';
+    }
+    $column = 'input_' . $inputCap;
+
+    $st = db()->query('SELECT m.*, p.name AS provider_name, p.base_url, p.api_key FROM ai_models m JOIN ai_providers p ON p.id = m.provider_id WHERE m.is_active = 1 ORDER BY m.priority ASC, m.id ASC');
+    $candidates = [];
+    foreach ($st->fetchAll() as $m) {
+        if ((int) $m[$column] !== 1) {
+            continue;
+        }
+        if ($requireOutputText && (int) $m['output_text'] !== 1) {
+            continue;
+        }
+        $candidates[] = $m;
+    }
+    return $candidates;
+}
+
+/** Catat satu pemakaian model (FR-047). */
+function ai_usage_record(array $model, string $kind, string $status, int $tokensIn, int $tokensOut, int $latencyMs): void
+{
+    db()->prepare('INSERT INTO ai_usage_logs (model_row_id, model_id, provider_name, kind, status, tokens_in, tokens_out, latency_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([(int) $model['id'], (string) $model['model_id'], (string) $model['provider_name'], $kind, $status, $tokensIn, $tokensOut, $latencyMs, date('Y-m-d H:i:s')]);
+}
+
+/**
+ * Panggil model pool via chat/completions mengikuti urutan prioritas (FR-025);
+ * model yang gagal dilewati ke model berikutnya; setiap percobaan dicatat (FR-047).
+ * $messages format chat OpenAI; $inputCap = text|image|file.
+ * Kembalikan ['ok','content','model','attempts','message'].
+ */
+function ai_pool_chat(array $messages, string $inputCap = 'text', array $options = []): array
+{
+    $candidates = ai_pool_candidates($inputCap);
+    if ($candidates === []) {
+        return ['ok' => false, 'content' => null, 'model' => '', 'attempts' => 0, 'message' => 'Tidak ada model aktif dengan kapabilitas yang dibutuhkan.'];
+    }
+
+    $maxTokens = (int) ($options['max_tokens'] ?? 512);
+    $timeout = (int) ($options['timeout'] ?? 60);
+    $attempts = 0;
+    $lastError = '';
+
+    foreach ($candidates as $m) {
+        $attempts++;
+        $payload = ['model' => (string) $m['model_id'], 'messages' => $messages, 'max_tokens' => $maxTokens];
+        if (isset($options['temperature'])) {
+            $payload['temperature'] = (float) $options['temperature'];
+        }
+
+        $start = microtime(true);
+        [$status, $data, $error] = ai_http_json('POST', rtrim((string) $m['base_url'], '/') . '/chat/completions', (string) $m['api_key'], $payload, $timeout);
+        $latency = (int) round((microtime(true) - $start) * 1000);
+
+        if ($status === 200 && is_array($data) && isset($data['choices'][0]['message']['content'])) {
+            ai_usage_record($m, 'chat', 'ok', (int) ($data['usage']['prompt_tokens'] ?? 0), (int) ($data['usage']['completion_tokens'] ?? 0), $latency);
+            return ['ok' => true, 'content' => (string) $data['choices'][0]['message']['content'], 'model' => (string) $m['model_id'], 'attempts' => $attempts, 'message' => ''];
+        }
+
+        ai_usage_record($m, 'chat', 'error', 0, 0, $latency);
+        $lastError = ai_http_error_detail($status, $data, $error);
+    }
+
+    return ['ok' => false, 'content' => null, 'model' => '', 'attempts' => $attempts, 'message' => 'Semua model gagal (' . $attempts . ' percobaan). Terakhir: ' . $lastError];
+}
+
+/**
+ * Transkripsi audio via model pool (FR-025 + FR-047), fallback berantai.
+ * $filePath harus berkas lokal yang dapat dibaca cURL.
+ */
+function ai_pool_transcribe(string $filePath, string $filename, string $mime, array $options = []): array
+{
+    $candidates = ai_pool_candidates('audio', false);
+    if ($candidates === []) {
+        return ['ok' => false, 'content' => null, 'model' => '', 'attempts' => 0, 'message' => 'Tidak ada model audio aktif.'];
+    }
+
+    $timeout = (int) ($options['timeout'] ?? 120);
+    $language = (string) ($options['language'] ?? 'id');
+    $attempts = 0;
+    $lastError = '';
+
+    foreach ($candidates as $m) {
+        $attempts++;
+        $ch = curl_init(rtrim((string) $m['base_url'], '/') . '/audio/transcriptions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => ['model' => (string) $m['model_id'], 'file' => new CURLFile($filePath, $mime, $filename), 'language' => $language],
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . (string) $m['api_key'], 'Accept: application/json'],
+        ]);
+        $start = microtime(true);
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = (string) curl_error($ch);
+        curl_close($ch);
+        $latency = (int) round((microtime(true) - $start) * 1000);
+
+        if ($body !== false) {
+            $data = json_decode((string) $body, true);
+            if ($status === 200 && is_array($data) && array_key_exists('text', $data)) {
+                // Endpoint transkripsi umumnya tidak mengembalikan jumlah token.
+                ai_usage_record($m, 'audio', 'ok', 0, 0, $latency);
+                return ['ok' => true, 'content' => (string) $data['text'], 'model' => (string) $m['model_id'], 'attempts' => $attempts, 'message' => ''];
+            }
+            $lastError = ai_http_error_detail($status, is_array($data) ? $data : null, '');
+        } else {
+            $lastError = ai_http_error_detail(0, null, $error);
+        }
+
+        ai_usage_record($m, 'audio', 'error', 0, 0, $latency);
+    }
+
+    return ['ok' => false, 'content' => null, 'model' => '', 'attempts' => $attempts, 'message' => 'Semua model audio gagal (' . $attempts . ' percobaan). Terakhir: ' . $lastError];
+}
+
+// ---------------- Usage & biaya (FR-047–FR-049) ----------------
+
+function ai_setting_get(string $key, string $default = ''): string
+{
+    $st = db()->prepare('SELECT value FROM settings WHERE key = ? LIMIT 1');
+    $st->execute([$key]);
+    $row = $st->fetch();
+    return $row === false ? $default : (string) $row['value'];
+}
+
+function ai_setting_set(string $key, string $value): void
+{
+    db()->prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at')
+        ->execute([$key, $value, date('Y-m-d H:i:s')]);
+}
+
+function ai_setting_updated(string $key): string
+{
+    $st = db()->prepare('SELECT updated_at FROM settings WHERE key = ? LIMIT 1');
+    $st->execute([$key]);
+    $row = $st->fetch();
+    return $row === false ? '' : (string) $row['updated_at'];
+}
+
+/** Kurs USD→IDR aktif (0 = belum diatur). */
+function ai_usd_idr_rate(): float
+{
+    return (float) ai_setting_get('usd_idr_rate', '0');
+}
+
+/** Rentang waktu preset untuk halaman usage. Kembalikan [from, to, label, preset]. */
+function ai_usage_range(string $preset): array
+{
+    $now = date('Y-m-d H:i:s');
+    switch ($preset) {
+        case 'hari-ini':
+            return [date('Y-m-d 00:00:00'), $now, 'Hari ini', 'hari-ini'];
+        case '30-hari':
+            return [date('Y-m-d 00:00:00', strtotime('-29 days')), $now, '30 hari terakhir', '30-hari'];
+        case 'bulan-ini':
+            return [date('Y-m-01 00:00:00'), $now, 'Bulan ini', 'bulan-ini'];
+        default:
+            return [date('Y-m-d 00:00:00', strtotime('-6 days')), $now, '7 hari terakhir', '7-hari'];
+    }
+}
+
+/** Jumlah baris usage dalam rentang. */
+function ai_usage_count(string $from, string $to): int
+{
+    $st = db()->prepare('SELECT COUNT(*) AS c FROM ai_usage_logs WHERE created_at >= ? AND created_at <= ?');
+    $st->execute([$from, $to]);
+    return (int) ($st->fetch()['c'] ?? 0);
+}
+
+/** Panggilan terakhir (berhalaman) untuk halaman usage. */
+function ai_usage_recent(string $from, string $to, int $limit = PER_PAGE, int $offset = 0): array
+{
+    $limit = max(1, $limit);
+    $offset = max(0, $offset);
+    $st = db()->prepare('SELECT * FROM ai_usage_logs WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT ' . $limit . ' OFFSET ' . $offset);
+    $st->execute([$from, $to]);
+    return $st->fetchAll();
+}
+
+/** Agregat usage per model + harga token terkini untuk estimasi biaya (FR-048). */
+function ai_usage_by_model(string $from, string $to): array
+{
+    $st = db()->prepare("SELECT u.provider_name, u.model_id,
+            SUM(u.tokens_in) AS tokens_in, SUM(u.tokens_out) AS tokens_out,
+            COUNT(*) AS calls,
+            SUM(CASE WHEN u.status = 'ok' THEN 1 ELSE 0 END) AS calls_ok,
+            MAX(m.price_in) AS price_in, MAX(m.price_out) AS price_out
+        FROM ai_usage_logs u
+        LEFT JOIN ai_providers p ON p.name = u.provider_name
+        LEFT JOIN ai_models m ON m.provider_id = p.id AND m.model_id = u.model_id COLLATE NOCASE
+        WHERE u.created_at >= ? AND u.created_at <= ?
+        GROUP BY u.provider_name, u.model_id
+        ORDER BY u.provider_name COLLATE NOCASE ASC, u.model_id COLLATE NOCASE ASC");
+    $st->execute([$from, $to]);
+
+    $rows = [];
+    foreach ($st->fetchAll() as $row) {
+        $tokensIn = (int) $row['tokens_in'];
+        $tokensOut = (int) $row['tokens_out'];
+        $hasPrice = $row['price_in'] !== null || $row['price_out'] !== null;
+        $usd = $hasPrice
+            ? $tokensIn / 1000000 * (float) $row['price_in'] + $tokensOut / 1000000 * (float) $row['price_out']
+            : null;
+        $rows[] = [
+            'provider_name' => (string) $row['provider_name'],
+            'model_id' => (string) $row['model_id'],
+            'calls' => (int) $row['calls'],
+            'calls_ok' => (int) $row['calls_ok'],
+            'tokens_in' => $tokensIn,
+            'tokens_out' => $tokensOut,
+            'usd' => $usd,
+        ];
+    }
+    return $rows;
+}
+
+/** Format biaya USD ringkas (desimal lebih banyak untuk nilai sangat kecil). */
+function ai_usd_display(float $usd): string
+{
+    if ($usd <= 0) {
+        return '0';
+    }
+    $decimals = $usd < 0.01 ? 6 : 4;
+    $text = number_format($usd, $decimals, '.', '');
+    return rtrim(rtrim($text, '0'), '.');
 }

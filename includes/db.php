@@ -176,6 +176,30 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
+    // Usage pool AI (FR-047) & pengaturan aplikasi (kurs FR-049).
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS ai_usage_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_row_id INTEGER NULL,
+            model_id TEXT NOT NULL,
+            provider_name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT \'chat\',
+            status TEXT NOT NULL DEFAULT \'error\',
+            tokens_in INTEGER NOT NULL DEFAULT 0,
+            tokens_out INTEGER NOT NULL DEFAULT 0,
+            latency_ms INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_members_user ON workspace_members (user_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ws_invitations_invitee ON workspace_invitations (invitee_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
@@ -183,6 +207,7 @@ function db_migrate(PDO $pdo): void
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_activity_logs (user_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON ai_models (provider_id)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_models_unique ON ai_models (provider_id, model_id COLLATE NOCASE)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs (created_at)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_ws_name ON accounts (workspace_id, name COLLATE NOCASE)');
 
     // --- Migrasi ringan basis data lama ---
