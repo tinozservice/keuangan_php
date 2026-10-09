@@ -153,6 +153,19 @@ function db_migrate(PDO $pdo): void
         )'
     );
 
+    // Pembatasan percobaan login (NFR-021): catatan kegagalan dalam jendela 15 menit.
+    // `user_id` terisi bila identifier terdaftar; identifier (lowercase) dipakai
+    // untuk identifier tak terdaftar agar pembatasan tetap per akun/identifier.
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+            identifier TEXT NOT NULL,
+            ip_address TEXT NULL,
+            created_at TEXT NOT NULL
+        )'
+    );
+
     // Pool AI (FR-039–FR-046): provider OpenAI-compatible + model fallback.
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS ai_providers (
@@ -220,6 +233,8 @@ function db_migrate(PDO $pdo): void
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_transactions_ws ON transactions (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_logs_ws ON activity_logs (workspace_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_logs_user ON user_activity_logs (user_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (user_id, created_at)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts (identifier, created_at)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_models_provider ON ai_models (provider_id)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_models_unique ON ai_models (provider_id, model_id COLLATE NOCASE)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs (created_at)');

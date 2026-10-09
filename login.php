@@ -17,7 +17,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = (string) ($_POST['password'] ?? '');
     $user = auth_find_user_by_email_or_username($ident);
 
+    // NFR-021: batasi 5 percobaan gagal per akun/identifier dalam 15 menit.
+    $lock = auth_login_lock_state($user, $ident);
+    if ($lock['locked']) {
+        flash_set('error', auth_login_lock_message((int) $lock['remaining']));
+        redirect('/login.php');
+    }
+
     if ($user === null || !password_verify($password, (string) $user['password_hash'])) {
+        auth_login_record_failure($user, $ident);
+
         // FR-060: identifier tak terdaftar dicatat dengan user_id NULL agar tetap terlacak.
         user_log_failed_login(
             $user === null ? null : (int) $user['id'],
@@ -26,9 +35,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'Percobaan login gagal — identifier tidak terdaftar'
                 : 'Percobaan login gagal — kata sandi salah'
         );
-        flash_set('error', 'Email/username atau kata sandi salah.');
+
+        $lock = auth_login_lock_state($user, $ident);
+        if ($lock['locked']) {
+            flash_set('error', auth_login_lock_message((int) $lock['remaining']));
+        } else {
+            flash_set('error', 'Email/username atau kata sandi salah. Sisa percobaan: ' . (int) $lock['left'] . '.');
+        }
         redirect('/login.php');
     }
+
+    // Kredensial benar → riwayat kegagalan dibersihkan (NFR-021).
+    auth_login_clear_failures($user, $ident);
 
     if ((int) $user['is_verified'] !== 1) {
         $_SESSION['pending_email'] = (string) $user['email'];

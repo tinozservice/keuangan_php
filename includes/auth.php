@@ -143,3 +143,90 @@ function auth_verify_otp(int $userId, string $code, bool $markVerified = true): 
     $pdo->prepare('DELETE FROM otp_codes WHERE user_id = ?')->execute([$userId]);
     return '';
 }
+
+// --- Pembatasan percobaan login (NFR-021) ---------------------------------
+
+/** NFR-021: maksimum percobaan gagal per akun/identifier dalam satu jendela. */
+const AUTH_LOGIN_MAX_FAILURES = 5;
+/** NFR-021: panjang jendela pembatasan sekaligus lama kunci sementara (detik). */
+const AUTH_LOGIN_LOCK_WINDOW = 900;
+
+/** Normalisasi identifier untuk pembatasan login (huruf kecil, tanpa spasi tepi). */
+function auth_login_identifier_key(string $identifier): string
+{
+    return strtolower(trim($identifier));
+}
+
+/** Cakupan riwayat kegagalan: per akun bila terdaftar, per identifier bila tidak. */
+function auth_login_attempt_scope(?array $user, string $identifier): array
+{
+    if ($user !== null) {
+        return ['user_id = ?', [(int) $user['id']]];
+    }
+    return ['user_id IS NULL AND identifier = ?', [auth_login_identifier_key($identifier)]];
+}
+
+/**
+ * Status pembatasan login (NFR-021).
+ * Terkunci bila ada >= 5 kegagalan dalam jendela 15 menit; kunci berakhir
+ * 15 menit setelah kegagalan pemicu (percobaan saat terkunci tidak dicatat
+ * ulang sehingga kunci tidak diperpanjang tanpa batas dari percobaan yang sama).
+ *
+ * @return array{locked: bool, remaining: int, left: int} `remaining` = detik sisa kunci; `left` = sisa percobaan.
+ */
+function auth_login_lock_state(?array $user, string $identifier): array
+{
+    [$where, $params] = auth_login_attempt_scope($user, $identifier);
+
+    $st = db()->prepare('SELECT created_at FROM login_attempts WHERE ' . $where . ' ORDER BY created_at DESC, id DESC LIMIT 1');
+    $st->execute($params);
+    $last = $st->fetchColumn();
+
+    if ($last === false) {
+        return ['locked' => false, 'remaining' => 0, 'left' => AUTH_LOGIN_MAX_FAILURES];
+    }
+
+    $lastTs = (int) strtotime((string) $last);
+    $lockedUntil = $lastTs + AUTH_LOGIN_LOCK_WINDOW;
+
+    $st = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE ' . $where . ' AND created_at >= ?');
+    $st->execute([...$params, date('Y-m-d H:i:s', $lastTs - AUTH_LOGIN_LOCK_WINDOW)]);
+    $cluster = (int) $st->fetchColumn();
+
+    if ($cluster >= AUTH_LOGIN_MAX_FAILURES && time() < $lockedUntil) {
+        return ['locked' => true, 'remaining' => $lockedUntil - time(), 'left' => 0];
+    }
+
+    $st = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE ' . $where . ' AND created_at >= ?');
+    $st->execute([...$params, date('Y-m-d H:i:s', time() - AUTH_LOGIN_LOCK_WINDOW)]);
+    $recent = (int) $st->fetchColumn();
+
+    return ['locked' => false, 'remaining' => 0, 'left' => max(0, AUTH_LOGIN_MAX_FAILURES - $recent)];
+}
+
+/** Catat satu kegagalan login untuk pembatasan (NFR-021); riwayat lama dibersihkan. */
+function auth_login_record_failure(?array $user, string $identifier): void
+{
+    db()->prepare('INSERT INTO login_attempts (user_id, identifier, ip_address, created_at) VALUES (?, ?, ?, ?)')
+        ->execute([
+            $user === null ? null : (int) $user['id'],
+            auth_login_identifier_key($identifier),
+            geo_client_ip(),
+            date('Y-m-d H:i:s'),
+        ]);
+    db()->prepare('DELETE FROM login_attempts WHERE created_at < ?')->execute([date('Y-m-d H:i:s', time() - 86400)]);
+}
+
+/** Hapus riwayat kegagalan setelah kredensial benar — hitungan dimulai bersih (NFR-021). */
+function auth_login_clear_failures(?array $user, string $identifier): void
+{
+    [$where, $params] = auth_login_attempt_scope($user, $identifier);
+    db()->prepare('DELETE FROM login_attempts WHERE ' . $where)->execute($params);
+}
+
+/** Pesan kunci sementara (NFR-021) — membulatkan sisa detik ke atas dalam menit. */
+function auth_login_lock_message(int $remainingSeconds): string
+{
+    $minutes = max(1, (int) ceil(max(0, $remainingSeconds) / 60));
+    return 'Terlalu banyak percobaan gagal. Demi keamanan, coba lagi dalam ' . $minutes . ' menit.';
+}
