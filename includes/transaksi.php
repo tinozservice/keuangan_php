@@ -5,12 +5,104 @@ require_once __DIR__ . '/log.php';
 require_once __DIR__ . '/pagination.php';
 require_once __DIR__ . '/rekening.php';
 
-function tx_list(int $wsId, int $limit = PER_PAGE, int $offset = 0): array
+/** Normalisasi filter pencarian manual (FR-030): dari/sampai (Y-m-d) + kata kunci q. */
+function tx_filter_from_query(array $query): array
+{
+    $valid = static function (string $d): bool {
+        $parsed = DateTime::createFromFormat('Y-m-d', $d);
+        return $parsed !== false && $parsed->format('Y-m-d') === $d;
+    };
+
+    $dari = trim((string) ($query['dari'] ?? ''));
+    $sampai = trim((string) ($query['sampai'] ?? ''));
+    $q = trim((string) ($query['q'] ?? ''));
+
+    if ($dari !== '' && !$valid($dari)) {
+        $dari = '';
+    }
+    if ($sampai !== '' && !$valid($sampai)) {
+        $sampai = '';
+    }
+    if ($dari !== '' && $sampai !== '' && $dari > $sampai) {
+        [$dari, $sampai] = [$sampai, $dari];
+    }
+    if (mb_strlen($q) > 100) {
+        $q = mb_substr($q, 0, 100);
+    }
+
+    return ['dari' => $dari, 'sampai' => $sampai, 'q' => $q];
+}
+
+/** True bila minimal satu filter pencarian aktif. */
+function tx_filter_active(array $filter): bool
+{
+    return (string) ($filter['dari'] ?? '') !== ''
+        || (string) ($filter['sampai'] ?? '') !== ''
+        || (string) ($filter['q'] ?? '') !== '';
+}
+
+/** Klausa WHERE + parameter terikat untuk filter transaksi (prepared statement). */
+function tx_filter_sql(array $filter, int $wsId): array
+{
+    $where = 't.workspace_id = ?';
+    $params = [$wsId];
+
+    $dari = (string) ($filter['dari'] ?? '');
+    $sampai = (string) ($filter['sampai'] ?? '');
+    $q = (string) ($filter['q'] ?? '');
+
+    if ($dari !== '') {
+        $where .= ' AND t.tx_date >= ?';
+        $params[] = $dari;
+    }
+    if ($sampai !== '') {
+        $where .= ' AND t.tx_date <= ?';
+        $params[] = $sampai;
+    }
+    if ($q !== '') {
+        $where .= " AND t.description LIKE ? ESCAPE '\\'";
+        $params[] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+    }
+
+    return [$where, $params];
+}
+
+/** Label filter aktif untuk ditampilkan di UI. */
+function tx_filter_label(array $filter): string
+{
+    $parts = [];
+    $dari = (string) ($filter['dari'] ?? '');
+    $sampai = (string) ($filter['sampai'] ?? '');
+    if ($dari !== '' || $sampai !== '') {
+        $parts[] = 'tanggal ' . ($dari !== '' ? date('d M Y', strtotime($dari)) : 'awal')
+            . ' – ' . ($sampai !== '' ? date('d M Y', strtotime($sampai)) : 'sekarang');
+    }
+    if ((string) ($filter['q'] ?? '') !== '') {
+        $parts[] = 'kata kunci "' . (string) $filter['q'] . '"';
+    }
+    return implode(' · ', $parts);
+}
+
+/** Filter sebagai parameter query string (tanpa nilai kosong). */
+function tx_filter_query(array $filter): array
+{
+    $out = [];
+    foreach (['dari', 'sampai', 'q'] as $key) {
+        $value = (string) ($filter[$key] ?? '');
+        if ($value !== '') {
+            $out[$key] = $value;
+        }
+    }
+    return $out;
+}
+
+function tx_list(int $wsId, int $limit = PER_PAGE, int $offset = 0, array $filter = []): array
 {
     $limit = max(1, $limit);
     $offset = max(0, $offset);
-    $st = db()->prepare('SELECT t.*, a.name AS account_name FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id WHERE t.workspace_id = ? ORDER BY t.tx_date DESC, t.id DESC LIMIT ' . $limit . ' OFFSET ' . $offset);
-    $st->execute([$wsId]);
+    [$where, $params] = tx_filter_sql($filter, $wsId);
+    $st = db()->prepare('SELECT t.*, a.name AS account_name FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id WHERE ' . $where . ' ORDER BY t.tx_date DESC, t.id DESC LIMIT ' . $limit . ' OFFSET ' . $offset);
+    $st->execute($params);
     return $st->fetchAll();
 }
 
@@ -22,20 +114,22 @@ function tx_get(int $id): ?array
     return $row === false ? null : $row;
 }
 
-function tx_count(int $wsId): int
+function tx_count(int $wsId, array $filter = []): int
 {
-    $st = db()->prepare('SELECT COUNT(*) AS c FROM transactions WHERE workspace_id = ?');
-    $st->execute([$wsId]);
+    [$where, $params] = tx_filter_sql($filter, $wsId);
+    $st = db()->prepare('SELECT COUNT(*) AS c FROM transactions t WHERE ' . $where);
+    $st->execute($params);
     return (int) ($st->fetch()['c'] ?? 0);
 }
 
-function tx_totals(int $wsId): array
+function tx_totals(int $wsId, array $filter = []): array
 {
+    [$where, $params] = tx_filter_sql($filter, $wsId);
     $st = db()->prepare("SELECT
-        COALESCE(SUM(CASE WHEN type = 'masuk' THEN amount ELSE 0 END), 0) AS total_masuk,
-        COALESCE(SUM(CASE WHEN type = 'keluar' THEN amount ELSE 0 END), 0) AS total_keluar
-        FROM transactions WHERE workspace_id = ?");
-    $st->execute([$wsId]);
+        COALESCE(SUM(CASE WHEN t.type = 'masuk' THEN t.amount ELSE 0 END), 0) AS total_masuk,
+        COALESCE(SUM(CASE WHEN t.type = 'keluar' THEN t.amount ELSE 0 END), 0) AS total_keluar
+        FROM transactions t WHERE " . $where);
+    $st->execute($params);
     $row = $st->fetch();
     $masuk = (int) ($row['total_masuk'] ?? 0);
     $keluar = (int) ($row['total_keluar'] ?? 0);
@@ -43,8 +137,9 @@ function tx_totals(int $wsId): array
 }
 
 /** Total masuk/keluar per rekening (termasuk baris "tanpa rekening") — urut nama, tanpa rekening di akhir. */
-function tx_totals_by_account(int $wsId): array
+function tx_totals_by_account(int $wsId, array $filter = []): array
 {
+    [$where, $params] = tx_filter_sql($filter, $wsId);
     $st = db()->prepare("SELECT
         t.account_id,
         a.name AS account_name,
@@ -53,10 +148,10 @@ function tx_totals_by_account(int $wsId): array
         COUNT(*) AS jumlah
         FROM transactions t
         LEFT JOIN accounts a ON a.id = t.account_id
-        WHERE t.workspace_id = ?
+        WHERE " . $where . "
         GROUP BY t.account_id, a.name
         ORDER BY (t.account_id IS NULL) ASC, a.name COLLATE NOCASE ASC");
-    $st->execute([$wsId]);
+    $st->execute($params);
 
     $rows = [];
     foreach ($st->fetchAll() as $row) {
@@ -71,6 +166,15 @@ function tx_totals_by_account(int $wsId): array
         ];
     }
     return $rows;
+}
+
+/** Semua transaksi workspace (tanpa pagination) untuk ekspor — urut kronologis naik. */
+function tx_all(int $wsId, array $filter = []): array
+{
+    [$where, $params] = tx_filter_sql($filter, $wsId);
+    $st = db()->prepare('SELECT t.*, a.name AS account_name FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id WHERE ' . $where . ' ORDER BY t.tx_date ASC, t.id ASC');
+    $st->execute($params);
+    return $st->fetchAll();
 }
 
 function tx_add(int $wsId, int $actorId, string $actorUsername, string $date, string $type, int $amount, string $description, ?int $accountId = null): int

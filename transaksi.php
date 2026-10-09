@@ -57,14 +57,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/transaksi.php?id=' . $id);
 }
 
+// Tampilan bawaan (aturan pengguna): 24 jam terakhir (kemarin s/d hari ini);
+// gunakan ?semua=1 untuk melihat seluruh transaksi tanpa filter bawaan.
+$showAll = (string) ($_GET['semua'] ?? '') === '1';
+$filter = tx_filter_from_query($_GET);
+$filterExplicit = tx_filter_active($filter);
+$filterDefault = !$filterExplicit && !$showAll;
+if ($filterDefault) {
+    $filter['dari'] = date('Y-m-d', time() - 86400);
+    $filter['sampai'] = date('Y-m-d');
+}
+$filterApplied = $filterExplicit || $filterDefault;
+$filterQuery = tx_filter_query($filter);
+
 $page = page_current();
-$totalTx = tx_count($id);
+$totalTx = tx_count($id, $filter);
 $totalPages = page_total($totalTx);
 $page = min($page, $totalPages);
-$transactions = tx_list($id, PER_PAGE, page_offset($page));
-$totals = tx_totals($id);
-$byAccount = tx_totals_by_account($id);
+$transactions = tx_list($id, PER_PAGE, page_offset($page), $filter);
+$totals = tx_totals($id, $filter);
+$byAccount = tx_totals_by_account($id, $filter);
 $accounts = rek_list($id);
+
+$listUrl = APP_BASE . '/transaksi.php?' . http_build_query(array_merge(['id' => $id], $filterQuery));
+$exportCsv = APP_BASE . '/transaksi-ekspor.php?' . http_build_query(array_merge(['id' => $id, 'format' => 'csv'], $filterQuery));
+$exportXlsx = APP_BASE . '/transaksi-ekspor.php?' . http_build_query(array_merge(['id' => $id, 'format' => 'xlsx'], $filterQuery));
 
 $page_title = 'Transaksi — ' . (string) $ws['name'];
 $page_desc = 'Daftar dan input transaksi workspace.';
@@ -91,6 +108,9 @@ $page_desc = 'Daftar dan input transaksi workspace.';
             </div>
 
             <section class="dash-section">
+                <?php if ($filterApplied): ?>
+                <p class="ws-meta">Angka mengikuti <?= $filterDefault ? 'tampilan bawaan (24 jam terakhir)' : 'filter pencarian aktif' ?>.</p>
+                <?php endif; ?>
                 <div class="stat-grid">
                     <div class="card ws-card">
                         <div class="ws-meta">Total masuk</div>
@@ -109,6 +129,9 @@ $page_desc = 'Daftar dan input transaksi workspace.';
 
             <section class="dash-section">
                 <h2>Rincian per rekening</h2>
+                <?php if ($filterApplied): ?>
+                <p class="ws-meta">Angka mengikuti <?= $filterDefault ? 'tampilan bawaan (24 jam terakhir)' : 'filter pencarian aktif' ?>.</p>
+                <?php endif; ?>
                 <?php if ($byAccount === []): ?>
                     <p class="ws-meta">Belum ada transaksi untuk dirinci.</p>
                 <?php else: ?>
@@ -184,9 +207,59 @@ $page_desc = 'Daftar dan input transaksi workspace.';
             </section>
 
             <section class="dash-section">
-                <h2>Daftar transaksi (<?= $totalTx ?>)</h2>
+                <h2>Cari transaksi</h2>
+                <form class="card ws-card" method="get" action="<?= e(APP_BASE) ?>/transaksi.php">
+                    <input type="hidden" name="id" value="<?= (int) $ws['id'] ?>">
+                    <div class="field">
+                        <label for="dari">Dari tanggal</label>
+                        <input class="input" type="date" id="dari" name="dari" value="<?= e((string) $filter['dari']) ?>">
+                    </div>
+                    <div class="field">
+                        <label for="sampai">Sampai tanggal</label>
+                        <input class="input" type="date" id="sampai" name="sampai" value="<?= e((string) $filter['sampai']) ?>">
+                    </div>
+                    <div class="field">
+                        <label for="q">Kata kunci deskripsi</label>
+                        <input class="input" type="text" id="q" name="q" maxlength="100" value="<?= e((string) $filter['q']) ?>" placeholder="cth: listrik">
+                    </div>
+                    <div class="inline-actions">
+                        <button class="btn btn-primary btn-sm" type="submit"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Cari</button>
+                        <?php if ($filterExplicit): ?>
+                        <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>">Reset</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($filterDefault): ?>
+                    <p class="field-hint">Sedang menampilkan 24 jam terakhir (bawaan). <a href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>&amp;semua=1">Lihat semua transaksi</a></p>
+                    <?php elseif ($showAll): ?>
+                    <p class="field-hint">Sedang menampilkan semua transaksi. <a href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>">Kembali ke bawaan (24 jam)</a></p>
+                    <?php endif; ?>
+                </form>
+            </section>
+
+            <section class="dash-section">
+                <div class="dash-head">
+                    <div>
+                        <h2><?= $filterExplicit ? 'Hasil pencarian' : 'Daftar transaksi' ?> (<?= $totalTx ?>)</h2>
+                        <?php if ($filterExplicit): ?>
+                        <p class="ws-meta">Filter: <?= e(tx_filter_label($filter)) ?></p>
+                        <?php elseif ($filterDefault): ?>
+                        <p class="ws-meta">Bawaan: 24 jam terakhir (<?= e(date('d M Y', strtotime((string) $filter['dari']))) ?> – <?= e(date('d M Y', strtotime((string) $filter['sampai']))) ?>)</p>
+                        <?php else: ?>
+                        <p class="ws-meta">Menampilkan seluruh transaksi.</p>
+                        <?php endif; ?>
+                    </div>
+                    <div class="inline-actions">
+                        <?php if ($filterDefault): ?>
+                        <a class="btn btn-primary btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>&amp;semua=1"><i class="fa-solid fa-list-ul" aria-hidden="true"></i> Lihat semua transaksi</a>
+                        <?php elseif ($showAll): ?>
+                        <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Kembali ke 24 jam</a>
+                        <?php endif; ?>
+                        <a class="btn btn-ghost btn-sm" href="<?= e($exportCsv) ?>"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Unduh CSV</a>
+                        <a class="btn btn-ghost btn-sm" href="<?= e($exportXlsx) ?>"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Unduh Excel</a>
+                    </div>
+                </div>
                 <?php if ($transactions === []): ?>
-                    <p class="ws-meta">Belum ada transaksi di workspace ini.</p>
+                    <p class="ws-meta"><?= $filterExplicit ? 'Tidak ada transaksi yang cocok dengan filter.' : ($filterDefault ? 'Belum ada transaksi dalam 24 jam terakhir.' : 'Belum ada transaksi di workspace ini.') ?></p>
                 <?php else: ?>
                 <div class="table-wrap">
                     <table class="data">
@@ -219,7 +292,7 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                         </tbody>
                     </table>
                 </div>
-                <?php page_render(APP_BASE . '/transaksi.php?id=' . $id, $page, $totalPages); ?>
+                <?php page_render($listUrl, $page, $totalPages); ?>
                 <?php endif; ?>
             </section>
         </div>
