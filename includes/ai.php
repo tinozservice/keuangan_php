@@ -294,8 +294,8 @@ function ai_pool_summary(): array
     ];
 }
 
-/** Detail pesan error HTTP yang ringkas. */
-function ai_http_error_detail(int $status, ?array $data, string $curlError): string
+/** Detail pesan error HTTP yang ringkas (bila balasan bukan JSON, sertakan potongan body). */
+function ai_http_error_detail(int $status, ?array $data, string $curlError, string $raw = ''): string
 {
     if ($status === 0) {
         return mb_substr('Koneksi gagal: ' . ($curlError !== '' ? $curlError : 'tidak diketahui'), 0, 200);
@@ -311,6 +311,10 @@ function ai_http_error_detail(int $status, ?array $data, string $curlError): str
         if ($message === '') {
             $message = (string) ($data['message'] ?? '');
         }
+    }
+    if ($message === '' && $raw !== '') {
+        $message = trim((string) preg_replace('/\s+/', ' ', $raw));
+        $message = mb_substr($message, 0, 160);
     }
     $message = trim($message);
     return mb_substr('HTTP ' . $status . ($message !== '' ? ': ' . $message : ''), 0, 200);
@@ -342,10 +346,10 @@ function ai_http_json(string $method, string $url, string $apiKey, ?array $jsonB
     curl_close($ch);
 
     if ($body === false) {
-        return [0, null, $error];
+        return [0, null, $error, ''];
     }
     $data = json_decode((string) $body, true);
-    return [$status, is_array($data) ? $data : null, ''];
+    return [$status, is_array($data) ? $data : null, '', (string) $body];
 }
 
 /** WAV senyap kecil untuk uji endpoint audio (0,3 detik, 16 kHz mono 16-bit). */
@@ -392,7 +396,7 @@ function ai_health_ping(int $modelId): array
     return ['error', ai_http_error_detail($status, $data, $error)];
 }
 
-/** Ping model audio-only via audio/transcriptions dengan WAV senyap. */
+/** Ping model audio-only: coba endpoint transkripsi, lalu fallback input_audio (OpenRouter dkk). */
 function ai_health_ping_audio(string $base, string $apiKey, string $model): array
 {
     $path = tempnam(sys_get_temp_dir(), 'aiwav');
@@ -400,30 +404,83 @@ function ai_health_ping_audio(string $base, string $apiKey, string $model): arra
         return ['error', 'Gagal menyiapkan berkas uji audio.'];
     }
     file_put_contents($path, ai_silent_wav());
+    $result = ai_transcribe_model([
+        'base_url' => $base,
+        'api_key' => $apiKey,
+        'model_id' => $model,
+    ], $path, 'uji.wav', 'audio/wav');
+    @unlink($path);
+    return $result['ok'] ? ['ok', 'HTTP 200'] : ['error', (string) $result['detail']];
+}
 
+/**
+ * Transkripsi satu model: coba /audio/transcriptions (OpenAI klasik), lalu fallback
+ * /chat/completions dengan konten input_audio (dipakai OpenRouter dkk.).
+ * Kembalikan [ok, text, detail].
+ */
+function ai_transcribe_model(array $model, string $filePath, string $filename, string $mime, string $language = 'id'): array
+{
+    $base = rtrim((string) $model['base_url'], '/');
+    $apiKey = (string) $model['api_key'];
+    $apiModel = (string) $model['model_id'];
+
+    // 1) Endpoint transkripsi klasik.
     $ch = curl_init($base . '/audio/transcriptions');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 20,
+        CURLOPT_TIMEOUT => 120,
         CURLOPT_CONNECTTIMEOUT => 8,
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => ['model' => $model, 'file' => new CURLFile($path, 'audio/wav', 'uji.wav')],
+        CURLOPT_POSTFIELDS => ['model' => $apiModel, 'file' => new CURLFile($filePath, $mime, $filename), 'language' => $language],
         CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $apiKey, 'Accept: application/json'],
     ]);
     $body = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $error = (string) curl_error($ch);
     curl_close($ch);
-    @unlink($path);
 
-    if ($body === false) {
-        return ['error', ai_http_error_detail(0, null, $error)];
+    $firstData = is_string($body) ? json_decode($body, true) : null;
+    if ($body !== false && $status === 200 && is_array($firstData) && array_key_exists('text', $firstData)) {
+        return ['ok' => true, 'text' => (string) $firstData['text'], 'detail' => 'HTTP 200'];
     }
-    $data = json_decode((string) $body, true);
-    if ($status === 200 && is_array($data) && array_key_exists('text', $data)) {
-        return ['ok', 'HTTP 200'];
+    $firstDetail = $body === false
+        ? ai_http_error_detail(0, null, $error)
+        : ai_http_error_detail($status, is_array($firstData) ? $firstData : null, '', (string) $body);
+
+    // 2) Fallback: chat/completions dengan input_audio (format OpenAI/OpenRouter).
+    $binary = @file_get_contents($filePath);
+    if ($binary === false) {
+        return ['ok' => false, 'text' => '', 'detail' => 'transcriptions: ' . $firstDetail . ' | gagal membaca berkas audio.'];
     }
-    return ['error', ai_http_error_detail($status, is_array($data) ? $data : null, '')];
+    $format = 'wav';
+    if (str_contains($mime, 'mpeg') || str_contains($mime, 'mp3')) {
+        $format = 'mp3';
+    } elseif (str_contains($mime, 'ogg')) {
+        $format = 'ogg';
+    } elseif (str_contains($mime, 'webm')) {
+        $format = 'webm';
+    } elseif (str_contains($mime, 'mp4') || str_contains($mime, 'm4a')) {
+        $format = 'm4a';
+    }
+
+    [$status2, $data2, $error2, $raw2] = ai_http_json('POST', $base . '/chat/completions', $apiKey, [
+        'model' => $apiModel,
+        'messages' => [[
+            'role' => 'user',
+            'content' => [
+                ['type' => 'text', 'text' => 'Transkripsikan rekaman audio berikut kata per kata (Bahasa Indonesia). Balas HANYA transkripnya.'],
+                ['type' => 'input_audio', 'input_audio' => ['data' => base64_encode($binary), 'format' => $format]],
+            ],
+        ]],
+        'max_tokens' => 500,
+    ], 120);
+
+    if ($status2 === 200 && is_array($data2) && isset($data2['choices'][0]['message']['content'])) {
+        return ['ok' => true, 'text' => (string) $data2['choices'][0]['message']['content'], 'detail' => 'HTTP 200 (input_audio)'];
+    }
+    $secondDetail = ai_http_error_detail($status2, is_array($data2) ? $data2 : null, $error2, $raw2);
+
+    return ['ok' => false, 'text' => '', 'detail' => 'transcriptions: ' . $firstDetail . ' | input_audio: ' . $secondDetail];
 }
 
 /** Uji satu model (tombol Uji/selektif) & simpan hasil terakhir (FR-045). Kembalikan [status, detail]. */
@@ -543,35 +600,18 @@ function ai_pool_transcribe(string $filePath, string $filename, string $mime, ar
 
     foreach ($candidates as $m) {
         $attempts++;
-        $ch = curl_init(rtrim((string) $m['base_url'], '/') . '/audio/transcriptions');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 8,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => ['model' => (string) $m['model_id'], 'file' => new CURLFile($filePath, $mime, $filename), 'language' => $language],
-            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . (string) $m['api_key'], 'Accept: application/json'],
-        ]);
         $start = microtime(true);
-        $body = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $error = (string) curl_error($ch);
-        curl_close($ch);
+        $result = ai_transcribe_model($m, $filePath, $filename, $mime, $language);
         $latency = (int) round((microtime(true) - $start) * 1000);
 
-        if ($body !== false) {
-            $data = json_decode((string) $body, true);
-            if ($status === 200 && is_array($data) && array_key_exists('text', $data)) {
-                // Endpoint transkripsi umumnya tidak mengembalikan jumlah token.
-                ai_usage_record($m, 'audio', 'ok', 0, 0, $latency);
-                return ['ok' => true, 'content' => (string) $data['text'], 'model' => (string) $m['model_id'], 'attempts' => $attempts, 'message' => ''];
-            }
-            $lastError = ai_http_error_detail($status, is_array($data) ? $data : null, '');
-        } else {
-            $lastError = ai_http_error_detail(0, null, $error);
+        if ($result['ok']) {
+            // Endpoint transkripsi umumnya tidak mengembalikan jumlah token.
+            ai_usage_record($m, 'audio', 'ok', 0, 0, $latency);
+            return ['ok' => true, 'content' => (string) $result['text'], 'model' => (string) $m['model_id'], 'attempts' => $attempts, 'message' => ''];
         }
 
         ai_usage_record($m, 'audio', 'error', 0, 0, $latency);
+        $lastError = (string) $result['detail'];
     }
 
     return ['ok' => false, 'content' => null, 'model' => '', 'attempts' => $attempts, 'message' => 'Semua model audio gagal (' . $attempts . ' percobaan). Terakhir: ' . $lastError];
@@ -687,4 +727,143 @@ function ai_usd_display(float $usd): string
     $decimals = $usd < 0.01 ? 6 : 4;
     $text = number_format($usd, $decimals, '.', '');
     return rtrim(rtrim($text, '0'), '.');
+}
+
+// ---------------- Input transaksi via suara/foto (FR-022–FR-026) ----------------
+
+/** Ambil objek JSON pertama dari keluaran model (toleran terhadap pagar kode/teks lain). */
+function ai_json_from_text(string $content): ?array
+{
+    $text = trim($content);
+    if (str_contains($text, '```')) {
+        $text = (string) preg_replace('/```[a-zA-Z]*\s*|\s*```/', '', $text);
+    }
+    $start = strpos($text, '{');
+    $end = strrpos($text, '}');
+    if ($start === false || $end === false || $end <= $start) {
+        return null;
+    }
+    $data = json_decode(substr($text, $start, $end - $start + 1), true);
+    return is_array($data) ? $data : null;
+}
+
+/** Normalisasi isian hasil ekstraksi; bagian tidak valid diisi null (FR-024). */
+function ai_extract_normalize(array $raw): array
+{
+    $out = ['tanggal' => null, 'jenis' => null, 'nominal' => null, 'deskripsi' => null, 'rekening' => null];
+
+    $tanggal = trim((string) ($raw['tanggal'] ?? ''));
+    if ($tanggal !== '') {
+        $parsed = DateTime::createFromFormat('Y-m-d', $tanggal);
+        if ($parsed !== false && $parsed->format('Y-m-d') === $tanggal) {
+            $out['tanggal'] = $tanggal;
+        }
+    }
+
+    $jenis = strtolower(trim((string) ($raw['jenis'] ?? '')));
+    if ($jenis === 'masuk' || $jenis === 'keluar') {
+        $out['jenis'] = $jenis;
+    }
+
+    $nominal = (string) preg_replace('/\D/', '', (string) ($raw['nominal'] ?? ''));
+    if ($nominal !== '' && (int) $nominal > 0 && (int) $nominal <= 999999999999) {
+        $out['nominal'] = (int) $nominal;
+    }
+
+    $deskripsi = trim((string) ($raw['deskripsi'] ?? ''));
+    if ($deskripsi !== '') {
+        $out['deskripsi'] = mb_substr($deskripsi, 0, 200);
+    }
+
+    $rekening = trim((string) ($raw['rekening'] ?? ''));
+    if ($rekening !== '') {
+        $out['rekening'] = mb_substr($rekening, 0, 60);
+    }
+
+    return $out;
+}
+
+/** Instruksi meminta model mengubah informasi menjadi isian transaksi (JSON). */
+function ai_extract_prompt(string $text, array $accountNames = []): string
+{
+    $accountLine = '';
+    if ($accountNames !== []) {
+        $accountLine = 'Rekening yang tersedia: ' . implode(', ', $accountNames) . '. '
+            . 'Bila informasi menyebut rekening/dompet dari daftar itu, isi "rekening" dengan nama PERSIS dari daftar; '
+            . 'bila tidak disebut atau ragu, isi null. ';
+    }
+    return 'Ubah informasi transaksi keuangan berikut menjadi JSON. '
+        . 'Hari ini: ' . date('Y-m-d') . '. Gunakan format tanggal YYYY-MM-DD (konversi kata seperti "hari ini"/"kemarin"). '
+        . 'Nilai uang dalam Rupiah, tulis sebagai angka tanpa titik/koma (cth: "25 ribu" = 25000). '
+        . 'Jenis hanya "masuk" atau "keluar". Bila suatu bagian tidak yakin, isi null. '
+        . $accountLine
+        . "Balas HANYA JSON dengan bentuk: {\"tanggal\":null,\"jenis\":null,\"nominal\":null,\"deskripsi\":null,\"rekening\":null}\n\n"
+        . 'Informasi: ' . $text;
+}
+
+/** Cocokkan nama rekening hasil ekstraksi dengan daftar rekening workspace (case-insensitive). */
+function ai_extract_match_account(array $accounts, string $name): ?int
+{
+    $needle = mb_strtolower(trim($name));
+    if ($needle === '') {
+        return null;
+    }
+    foreach ($accounts as $acc) {
+        if (mb_strtolower(trim((string) $acc['name'])) === $needle) {
+            return (int) $acc['id'];
+        }
+    }
+    foreach ($accounts as $acc) {
+        $accName = mb_strtolower(trim((string) $acc['name']));
+        if ($accName !== '' && (str_contains($accName, $needle) || str_contains($needle, $accName))) {
+            return (int) $acc['id'];
+        }
+    }
+    return null;
+}
+
+/** Ekstraksi isian dari transkrip suara (FR-022/FR-024) + pencocokan rekening. */
+function ai_extract_from_audio_text(string $transcript, array $accounts = []): array
+{
+    $accountNames = array_values(array_filter(array_map(static fn (array $a): string => (string) $a['name'], $accounts)));
+    $res = ai_pool_chat([['role' => 'user', 'content' => ai_extract_prompt($transcript, $accountNames)]], 'text', ['max_tokens' => 300]);
+    if (!$res['ok']) {
+        return ['ok' => false, 'fields' => null, 'message' => $res['message'], 'model' => ''];
+    }
+    $parsed = ai_json_from_text((string) $res['content']);
+    if ($parsed === null) {
+        return ['ok' => false, 'fields' => null, 'message' => 'Model tidak mengembalikan JSON yang valid.', 'model' => (string) $res['model']];
+    }
+    $fields = ai_extract_normalize($parsed);
+    $fields['rekening_id'] = ai_extract_match_account($accounts, (string) ($fields['rekening'] ?? ''));
+    return ['ok' => true, 'fields' => $fields, 'message' => '', 'model' => (string) $res['model']];
+}
+
+/** Ekstraksi isian dari foto struk (FR-023/FR-024) + pencocokan rekening. */
+function ai_extract_from_image(string $path, string $mime, array $accounts = []): array
+{
+    $binary = @file_get_contents($path);
+    if ($binary === false) {
+        return ['ok' => false, 'fields' => null, 'message' => 'Gagal membaca berkas gambar.', 'model' => ''];
+    }
+    $accountNames = array_values(array_filter(array_map(static fn (array $a): string => (string) $a['name'], $accounts)));
+    $res = ai_pool_chat([
+        [
+            'role' => 'user',
+            'content' => [
+                ['type' => 'text', 'text' => ai_extract_prompt('Lihat foto struk/nota pada gambar.', $accountNames)],
+                ['type' => 'image_url', 'image_url' => ['url' => 'data:' . $mime . ';base64,' . base64_encode($binary)]],
+            ],
+        ],
+    ], 'image', ['max_tokens' => 300]);
+    if (!$res['ok']) {
+        return ['ok' => false, 'fields' => null, 'message' => $res['message'], 'model' => ''];
+    }
+    $parsed = ai_json_from_text((string) $res['content']);
+    if ($parsed === null) {
+        return ['ok' => false, 'fields' => null, 'message' => 'Model tidak mengembalikan JSON yang valid.', 'model' => (string) $res['model']];
+    }
+    $fields = ai_extract_normalize($parsed);
+    $fields['rekening_id'] = ai_extract_match_account($accounts, (string) ($fields['rekening'] ?? ''));
+    return ['ok' => true, 'fields' => $fields, 'message' => '', 'model' => (string) $res['model']];
 }

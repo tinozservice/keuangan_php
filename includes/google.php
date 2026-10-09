@@ -13,9 +13,41 @@ function google_client_secret(): string
     return trim((string) env('GOOGLE_CLIENT_SECRET', ''));
 }
 
+/** Daftar URL callback yang diizinkan (boleh lebih dari satu, dipisah koma/baris baru). */
+function google_redirect_uris(): array
+{
+    $raw = (string) env('GOOGLE_REDIRECT_URI', '');
+    $list = [];
+    foreach (preg_split('/[\r\n,]+/', $raw) ?: [] as $uri) {
+        $uri = trim($uri);
+        if ($uri !== '') {
+            $list[] = $uri;
+        }
+    }
+    return $list;
+}
+
+/** Redirect URI aktif: pilih yang host-nya cocok dengan domain yang diakses; fallback ke entri pertama. */
 function google_redirect_uri(): string
 {
-    return trim((string) env('GOOGLE_REDIRECT_URI', ''));
+    $list = google_redirect_uris();
+    if ($list === []) {
+        return '';
+    }
+
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if ($host !== '') {
+        foreach ($list as $uri) {
+            $uriHost = (string) parse_url($uri, PHP_URL_HOST);
+            $uriPort = parse_url($uri, PHP_URL_PORT);
+            $candidate = $uriHost . ($uriPort ? ':' . $uriPort : '');
+            if ($uriHost !== '' && strcasecmp($candidate, $host) === 0) {
+                return $uri;
+            }
+        }
+    }
+
+    return $list[0];
 }
 
 /** True bila kredensial Google OAuth tersedia lengkap di .env. */

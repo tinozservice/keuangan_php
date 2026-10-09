@@ -363,6 +363,16 @@ html {
     text-align: center;
 }
 
+.field-hint.is-error {
+    color: var(--orange-ink);
+    font-weight: 600;
+}
+
+.field-hint.is-ok {
+    color: var(--ink-2);
+    font-weight: 500;
+}
+
 .meta-list {
     display: grid;
     gap: 8px;

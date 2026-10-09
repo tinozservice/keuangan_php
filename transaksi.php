@@ -171,6 +171,15 @@ $page_desc = 'Daftar dan input transaksi workspace.';
                 <form class="card ws-card" method="post" action="<?= e(APP_BASE) ?>/transaksi.php?id=<?= (int) $ws['id'] ?>">
                     <?= csrf_field() ?>
                     <input type="hidden" name="aksi" value="tambah">
+                    <div class="field" data-ai-extract data-endpoint="<?= e(APP_BASE) ?>/transaksi-ekstrak.php?id=<?= (int) $ws['id'] ?>">
+                        <label>Input cepat dengan AI (opsional)</label>
+                        <div class="inline-actions">
+                            <button class="btn btn-ghost btn-sm" type="button" data-ai-record aria-pressed="false"><i class="fa-solid fa-microphone" aria-hidden="true"></i> <span data-ai-record-label>Rekam suara</span></button>
+                            <button class="btn btn-ghost btn-sm" type="button" data-ai-photo><i class="fa-solid fa-camera" aria-hidden="true"></i> Foto struk</button>
+                            <input class="sr-only" type="file" accept="image/*" capture="environment" data-ai-file tabindex="-1">
+                        </div>
+                        <span class="field-hint" data-ai-status>Rekam suara atau ambil foto struk — hasil otomatis mengisi isian di bawah dan tetap bisa disunting sebelum disimpan.</span>
+                    </div>
                     <div class="field">
                         <label for="tx_date">Tanggal</label>
                         <input class="input" type="date" id="tx_date" name="tx_date" required value="<?= e(date('Y-m-d')) ?>">
