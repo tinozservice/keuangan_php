@@ -2,10 +2,10 @@
 /** Pagination terpusat — aturan pengguna: urutan menurun (terbaru dulu), 10 baris per halaman. */
 define('PER_PAGE', 10);
 
-/** Halaman aktif dari query string (?hal=N), minimal 1. */
-function page_current(): int
+/** Halaman aktif dari query string (default ?hal=N, atau parameter lain), minimal 1. */
+function page_current(string $param = 'hal'): int
 {
-    $page = (int) ($_GET['hal'] ?? 1);
+    $page = (int) ($_GET[$param] ?? 1);
     return $page < 1 ? 1 : $page;
 }
 
@@ -19,15 +19,15 @@ function page_total(int $totalRows, int $perPage = PER_PAGE): int
     return max(1, (int) ceil($totalRows / $perPage));
 }
 
-/** URL halaman dengan parameter `hal`. */
-function page_url(string $baseUrl, int $page): string
+/** URL halaman dengan parameter halaman (default `hal`). */
+function page_url(string $baseUrl, int $page, string $param = 'hal'): string
 {
     $separator = str_contains($baseUrl, '?') ? '&' : '?';
-    return $baseUrl . $separator . 'hal=' . $page;
+    return $baseUrl . $separator . $param . '=' . $page;
 }
 
 /** Render bar pagination (Sebelumnya, nomor, Berikutnya) — aman HTML. */
-function page_render(string $baseUrl, int $page, int $totalPages): void
+function page_render(string $baseUrl, int $page, int $totalPages, string $param = 'hal'): void
 {
     if ($totalPages <= 1) {
         return;
@@ -42,7 +42,7 @@ function page_render(string $baseUrl, int $page, int $totalPages): void
 
     echo '<nav class="pager" aria-label="Navigasi halaman">';
     if ($page > 1) {
-        echo '<a class="pager-link" href="' . e(page_url($baseUrl, $page - 1)) . '">‹ Sebelumnya</a>';
+        echo '<a class="pager-link" href="' . e(page_url($baseUrl, $page - 1, $param)) . '">‹ Sebelumnya</a>';
     } else {
         echo '<span class="pager-link is-disabled">‹ Sebelumnya</span>';
     }
@@ -55,13 +55,13 @@ function page_render(string $baseUrl, int $page, int $totalPages): void
         if ($number === $page) {
             echo '<span class="pager-link is-active">' . $number . '</span>';
         } else {
-            echo '<a class="pager-link" href="' . e(page_url($baseUrl, $number)) . '">' . $number . '</a>';
+            echo '<a class="pager-link" href="' . e(page_url($baseUrl, $number, $param)) . '">' . $number . '</a>';
         }
         $previous = $number;
     }
 
     if ($page < $totalPages) {
-        echo '<a class="pager-link" href="' . e(page_url($baseUrl, $page + 1)) . '">Berikutnya ›</a>';
+        echo '<a class="pager-link" href="' . e(page_url($baseUrl, $page + 1, $param)) . '">Berikutnya ›</a>';
     } else {
         echo '<span class="pager-link is-disabled">Berikutnya ›</span>';
     }

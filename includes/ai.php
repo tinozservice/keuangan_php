@@ -1,6 +1,7 @@
 <?php
 /** Modul AI Orchestrator — pengelolaan pool provider/model & pemeriksaan kesehatan (FR-039–FR-046). */
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pagination.php';
 
 /** Kapabilitas input model (FR-041). */
 function ai_input_caps(): array
@@ -40,6 +41,21 @@ function ai_price_display(float $value): string
 function ai_provider_list(): array
 {
     $st = db()->query('SELECT p.*, (SELECT COUNT(*) FROM ai_models m WHERE m.provider_id = p.id) AS model_count FROM ai_providers p ORDER BY p.name COLLATE NOCASE ASC, p.id ASC');
+    return $st->fetchAll();
+}
+
+/** Jumlah provider. */
+function ai_provider_count(): int
+{
+    return (int) db()->query('SELECT COUNT(*) AS c FROM ai_providers')->fetch()['c'];
+}
+
+/** Daftar provider berhalaman (urut nama) untuk tampilan Pool AI. */
+function ai_provider_page(int $limit = PER_PAGE, int $offset = 0): array
+{
+    $limit = max(1, $limit);
+    $offset = max(0, $offset);
+    $st = db()->query('SELECT p.*, (SELECT COUNT(*) FROM ai_models m WHERE m.provider_id = p.id) AS model_count FROM ai_providers p ORDER BY p.name COLLATE NOCASE ASC, p.id ASC LIMIT ' . $limit . ' OFFSET ' . $offset);
     return $st->fetchAll();
 }
 
@@ -105,6 +121,21 @@ function ai_provider_delete(int $id): void
 function ai_model_list(): array
 {
     $st = db()->query('SELECT m.*, p.name AS provider_name FROM ai_models m JOIN ai_providers p ON p.id = m.provider_id ORDER BY m.priority ASC, m.id ASC');
+    return $st->fetchAll();
+}
+
+/** Jumlah model pool. */
+function ai_model_count(): int
+{
+    return (int) db()->query('SELECT COUNT(*) AS c FROM ai_models')->fetch()['c'];
+}
+
+/** Daftar model berhalaman (urut prioritas — urutan fallback) untuk tampilan Pool AI. */
+function ai_model_page(int $limit = PER_PAGE, int $offset = 0): array
+{
+    $limit = max(1, $limit);
+    $offset = max(0, $offset);
+    $st = db()->query('SELECT m.*, p.name AS provider_name FROM ai_models m JOIN ai_providers p ON p.id = m.provider_id ORDER BY m.priority ASC, m.id ASC LIMIT ' . $limit . ' OFFSET ' . $offset);
     return $st->fetchAll();
 }
 

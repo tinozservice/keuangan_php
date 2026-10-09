@@ -1,12 +1,20 @@
 <?php
-/* Pencatat Keuangan — panel admin: pool AI (provider & model fallback, FR-039–FR-046). */
+/* Pencatat Keuangan — panel admin: pool AI (provider & model fallback, FR-039–FR-046; berhalaman). */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/includes/init.php';
 require dirname(__DIR__) . '/includes/auth.php';
 require_once dirname(__DIR__) . '/includes/ai.php';
+require_once dirname(__DIR__) . '/includes/pagination.php';
 
 $admin = auth_require_admin();
+
+// Pertahankan posisi halaman saat kembali setelah aksi (toggle/geser/hapus).
+$backQuery = http_build_query(array_filter([
+    'hal' => (int) ($_POST['hal'] ?? 0) > 1 ? (int) $_POST['hal'] : null,
+    'halp' => (int) ($_POST['halp'] ?? 0) > 1 ? (int) $_POST['halp'] : null,
+]));
+$backUrl = '/admin/ai.php' . ($backQuery !== '' ? '?' . $backQuery : '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_require();
@@ -16,28 +24,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($model === null) {
         flash_set('error', 'Model tidak ditemukan.');
-        redirect('/admin/ai.php');
+        redirect($backUrl);
     }
 
     if ($aksi === 'toggle') {
         ai_model_toggle($modelId);
         flash_set('ok', 'Model "' . (string) $model['model_id'] . '" ' . ((int) $model['is_active'] === 1 ? 'dinonaktifkan — dilewati pada percobaan fallback.' : 'diaktifkan — ikut pada percobaan fallback.'));
-        redirect('/admin/ai.php');
+        redirect($backUrl);
     }
     if ($aksi === 'naik' || $aksi === 'turun') {
         ai_model_move($modelId, $aksi);
         flash_set('ok', 'Urutan model "' . (string) $model['model_id'] . '" digeser ' . ($aksi === 'naik' ? 'ke atas' : 'ke bawah') . '.');
-        redirect('/admin/ai.php');
+        redirect($backUrl);
     }
 
     flash_set('error', 'Aksi tidak dikenali.');
-    redirect('/admin/ai.php');
+    redirect($backUrl);
 }
 
-$providers = ai_provider_list();
-$models = ai_model_list();
+// Pagination: provider memakai parameter halp, model memakai parameter hal (10 baris/halaman).
+$providerPage = page_current('halp');
+$providerTotal = ai_provider_count();
+$providerPages = page_total($providerTotal);
+$providerPage = min($providerPage, $providerPages);
+$providers = ai_provider_page(PER_PAGE, page_offset($providerPage));
+
+$modelPage = page_current('hal');
+$modelTotal = ai_model_count();
+$modelPages = page_total($modelTotal);
+$modelPage = min($modelPage, $modelPages);
+$modelOffset = page_offset($modelPage);
+$models = ai_model_page(PER_PAGE, $modelOffset);
+
 $summary = ai_pool_summary();
-$totalModels = count($models);
 
 $page_title = 'Pool AI — Panel Admin';
 $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta urutan prioritas.';
@@ -55,7 +74,7 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
             <div class="dash-head">
                 <div>
                     <h1>Pool AI</h1>
-                    <p class="lead"><?= count($providers) ?> provider · <?= $summary['models'] ?> model (<?= $summary['active'] ?> aktif). Urutan baris = urutan percobaan fallback (FR-025).</p>
+                    <p class="lead"><?= $providerTotal ?> provider · <?= $summary['models'] ?> model (<?= $summary['active'] ?> aktif). Urutan baris = urutan percobaan fallback (FR-025).</p>
                 </div>
                 <div class="inline-actions">
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-kesehatan.php"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i> Periksa kesehatan</a>
@@ -65,7 +84,7 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
 
             <section class="dash-section">
                 <div class="dash-head">
-                    <h2>Provider (<?= count($providers) ?>)</h2>
+                    <h2>Provider (<?= $providerTotal ?>)</h2>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-provider.php"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah provider</a>
                 </div>
                 <?php if ($providers === []): ?>
@@ -86,24 +105,25 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
                         <div class="ws-meta">API Key: <span class="mono"><?= e(ai_mask_key((string) $p['api_key'])) ?></span></div>
                         <div class="inline-actions">
                             <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-provider.php?id=<?= (int) $p['id'] ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> Ubah</a>
-                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-hapus.php?jenis=provider&amp;id=<?= (int) $p['id'] ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i> Hapus…</a>
+                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-hapus.php?jenis=provider&amp;id=<?= (int) $p['id'] ?>&amp;hal=<?= $modelPage ?>&amp;halp=<?= $providerPage ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i> Hapus…</a>
                         </div>
                     </article>
                     <?php endforeach; ?>
                 </div>
+                <?php page_render(APP_BASE . '/admin/ai.php' . ($modelPage > 1 ? '?hal=' . $modelPage : ''), $providerPage, $providerPages, 'halp'); ?>
                 <?php endif; ?>
             </section>
 
             <section class="dash-section">
                 <div class="dash-head">
-                    <h2>Model fallback (<?= $totalModels ?>)</h2>
+                    <h2>Model fallback (<?= $modelTotal ?>)</h2>
                     <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-model.php"><i class="fa-solid fa-plus" aria-hidden="true"></i> Tambah model</a>
                 </div>
                 <?php if ($models === []): ?>
                     <p class="ws-meta">Belum ada model. Tambahkan model pada salah satu provider, lengkapi kapabilitas input/output (FR-041) dan harga token per 1 juta (untuk estimasi biaya).</p>
                 <?php else: ?>
                 <div class="member-list">
-                    <?php $position = 0; foreach ($models as $m): $position++; ?>
+                    <?php $position = $modelOffset; foreach ($models as $m): $position++; ?>
                     <?php
                     $modelRowId = (int) $m['id'];
                     $inLabels = ai_model_cap_labels($m, 'input');
@@ -117,13 +137,17 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="aksi" value="naik">
                                     <input type="hidden" name="model_id" value="<?= $modelRowId ?>">
+                                    <input type="hidden" name="hal" value="<?= $modelPage ?>">
+                                    <input type="hidden" name="halp" value="<?= $providerPage ?>">
                                     <button class="btn btn-ghost btn-sm" type="submit" <?= $position === 1 ? 'disabled' : '' ?> aria-label="Naikkan urutan"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
                                 </form>
                                 <form method="post" action="<?= e(APP_BASE) ?>/admin/ai.php">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="aksi" value="turun">
                                     <input type="hidden" name="model_id" value="<?= $modelRowId ?>">
-                                    <button class="btn btn-ghost btn-sm" type="submit" <?= $position === $totalModels ? 'disabled' : '' ?> aria-label="Turunkan urutan"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button>
+                                    <input type="hidden" name="hal" value="<?= $modelPage ?>">
+                                    <input type="hidden" name="halp" value="<?= $providerPage ?>">
+                                    <button class="btn btn-ghost btn-sm" type="submit" <?= $position === $modelTotal ? 'disabled' : '' ?> aria-label="Turunkan urutan"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button>
                                 </form>
                                 <span class="mono"><strong><?= e((string) $m['model_id']) ?></strong></span>
                             </div>
@@ -169,14 +193,17 @@ $page_desc = 'Kelola provider OpenAI-compatible dan model fallback beserta uruta
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="aksi" value="toggle">
                                 <input type="hidden" name="model_id" value="<?= $modelRowId ?>">
+                                <input type="hidden" name="hal" value="<?= $modelPage ?>">
+                                <input type="hidden" name="halp" value="<?= $providerPage ?>">
                                 <button class="btn btn-ghost btn-sm" type="submit"><i class="fa-solid <?= (int) $m['is_active'] === 1 ? 'fa-pause' : 'fa-play' ?>" aria-hidden="true"></i> <?= (int) $m['is_active'] === 1 ? 'Nonaktifkan' : 'Aktifkan' ?></button>
                             </form>
                             <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-model.php?id=<?= $modelRowId ?>"><i class="fa-solid fa-pen" aria-hidden="true"></i> Ubah</a>
-                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-hapus.php?jenis=model&amp;id=<?= $modelRowId ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i> Hapus…</a>
+                            <a class="btn btn-ghost btn-sm" href="<?= e(APP_BASE) ?>/admin/ai-hapus.php?jenis=model&amp;id=<?= $modelRowId ?>&amp;hal=<?= $modelPage ?>&amp;halp=<?= $providerPage ?>"><i class="fa-solid fa-trash" aria-hidden="true"></i> Hapus…</a>
                         </div>
                     </article>
                     <?php endforeach; ?>
                 </div>
+                <?php page_render(APP_BASE . '/admin/ai.php' . ($providerPage > 1 ? '?halp=' . $providerPage : ''), $modelPage, $modelPages, 'hal'); ?>
                 <?php endif; ?>
             </section>
         </div>
