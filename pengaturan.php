@@ -1,5 +1,5 @@
 <?php
-/* Pencatat Keuangan — pengaturan akun: ubah nama tampilan (FR-009) & kata sandi (FR-011). */
+/* Pencatat Keuangan — pengaturan akun: ubah nama tampilan (FR-009), kata sandi (FR-011), & buat kata sandi akun Google (FR-058). */
 declare(strict_types=1);
 
 require __DIR__ . '/includes/init.php';
@@ -38,8 +38,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($baru !== $ulang) {
             flash_set('error', 'Ulangi kata sandi baru tidak cocok.');
         } else {
-            db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($baru, PASSWORD_DEFAULT), (int) $user['id']]);
+            db()->prepare('UPDATE users SET password_hash = ?, has_password = 1 WHERE id = ?')->execute([password_hash($baru, PASSWORD_DEFAULT), (int) $user['id']]);
             flash_set('ok', 'Kata sandi diperbarui.');
+        }
+        redirect('/pengaturan.php');
+    }
+
+    if ($aksi === 'buat_sandi') {
+        $baru = (string) ($_POST['sandi_baru'] ?? '');
+        $ulang = (string) ($_POST['sandi_ulang'] ?? '');
+
+        $st = db()->prepare('SELECT has_password FROM users WHERE id = ? LIMIT 1');
+        $st->execute([(int) $user['id']]);
+
+        if ((int) $st->fetchColumn() === 1) {
+            flash_set('error', 'Akun Anda sudah memiliki kata sandi. Gunakan formulir Ganti kata sandi.');
+        } elseif (strlen($baru) < 8) {
+            flash_set('error', 'Kata sandi baru minimal 8 karakter.');
+        } elseif ($baru !== $ulang) {
+            flash_set('error', 'Ulangi kata sandi baru tidak cocok.');
+        } else {
+            db()->prepare('UPDATE users SET password_hash = ?, has_password = 1 WHERE id = ?')->execute([password_hash($baru, PASSWORD_DEFAULT), (int) $user['id']]);
+            flash_set('ok', 'Kata sandi berhasil dibuat. Anda kini dapat masuk dengan email & kata sandi.');
         }
         redirect('/pengaturan.php');
     }
@@ -82,6 +102,27 @@ $page_desc = 'Ubah nama tampilan dan kata sandi akun Anda.';
                     </form>
                 </section>
 
+                <?php if ((int) ($user['has_password'] ?? 1) === 0): ?>
+                <section class="card auth-card">
+                    <div>
+                        <h1>Buat kata sandi</h1>
+                        <p class="lead">Akun Anda dibuat melalui Google sehingga belum memiliki kata sandi. Buat kata sandi agar dapat masuk tanpa Google (email & kata sandi).</p>
+                    </div>
+                    <form class="auth-form" method="post" action="<?= e(APP_BASE) ?>/pengaturan.php">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="aksi" value="buat_sandi">
+                        <div class="field">
+                            <label for="sandi_baru">Kata sandi baru</label>
+                            <input class="input" type="password" id="sandi_baru" name="sandi_baru" minlength="8" required autocomplete="new-password">
+                        </div>
+                        <div class="field">
+                            <label for="sandi_ulang">Ulangi kata sandi baru</label>
+                            <input class="input" type="password" id="sandi_ulang" name="sandi_ulang" minlength="8" required autocomplete="new-password">
+                        </div>
+                        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-key" aria-hidden="true"></i> Buat kata sandi</button>
+                    </form>
+                </section>
+                <?php else: ?>
                 <section class="card auth-card">
                     <div>
                         <h1>Ganti kata sandi</h1>
@@ -105,6 +146,7 @@ $page_desc = 'Ubah nama tampilan dan kata sandi akun Anda.';
                         <button class="btn btn-primary" type="submit"><i class="fa-solid fa-key" aria-hidden="true"></i> Perbarui kata sandi</button>
                     </form>
                 </section>
+                <?php endif; ?>
             </div>
         </div>
     </main>

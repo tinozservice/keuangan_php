@@ -17,7 +17,7 @@ function auth_user(): ?array
         return null;
     }
 
-    $st = db()->prepare('SELECT id, name, username, email, is_verified, role, created_at FROM users WHERE id = ? LIMIT 1');
+    $st = db()->prepare('SELECT id, name, username, email, has_password, is_verified, role, created_at FROM users WHERE id = ? LIMIT 1');
     $st->execute([$uid]);
     $row = $st->fetch();
 
@@ -93,7 +93,7 @@ function auth_username_exists(string $username): bool
 
 function auth_create_user(string $username, string $email, string $password): int
 {
-    $st = db()->prepare('INSERT INTO users (name, username, email, password_hash, is_verified, created_at) VALUES (?, ?, ?, ?, 0, ?)');
+    $st = db()->prepare('INSERT INTO users (name, username, email, password_hash, has_password, is_verified, created_at) VALUES (?, ?, ?, ?, 1, 0, ?)');
     $st->execute([$username, $username, strtolower(trim($email)), password_hash($password, PASSWORD_DEFAULT), date('Y-m-d H:i:s')]);
     return (int) db()->lastInsertId();
 }

@@ -197,7 +197,7 @@ function google_login_or_register(array $info): array
     // 3) Pengguna baru — dibuat terverifikasi (email diverifikasi Google).
     $username = google_username_from_email($email);
     $hash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
-    $pdo->prepare("INSERT INTO users (name, username, email, password_hash, is_verified, verified_at, role, google_id, created_at) VALUES (?, ?, ?, ?, 1, ?, 'user', ?, ?)")
+    $pdo->prepare("INSERT INTO users (name, username, email, password_hash, has_password, is_verified, verified_at, role, google_id, created_at) VALUES (?, ?, ?, ?, 0, 1, ?, 'user', ?, ?)")
         ->execute([$name, $username, $email, $hash, date('Y-m-d H:i:s'), $googleId, date('Y-m-d H:i:s')]);
     $userId = (int) $pdo->lastInsertId();
     auth_login_user($userId);

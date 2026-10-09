@@ -36,6 +36,7 @@ function db_migrate(PDO $pdo): void
             username TEXT NULL,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL,
+            has_password INTEGER NOT NULL DEFAULT 1,
             is_verified INTEGER NOT NULL DEFAULT 0,
             verified_at TEXT NULL,
             role TEXT NOT NULL DEFAULT \'user\',
@@ -225,6 +226,11 @@ function db_migrate(PDO $pdo): void
     }
     if (!isset($userCols['google_id'])) {
         $pdo->exec('ALTER TABLE users ADD COLUMN google_id TEXT NULL');
+    }
+    if (!isset($userCols['has_password'])) {
+        // Akun yang dibuat via Google belum memiliki kata sandi nyata (FR-058).
+        $pdo->exec('ALTER TABLE users ADD COLUMN has_password INTEGER NOT NULL DEFAULT 1');
+        $pdo->exec('UPDATE users SET has_password = 0 WHERE google_id IS NOT NULL');
     }
 
     // Isi username yang kosong (dari awalan email, dijamin unik).

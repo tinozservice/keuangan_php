@@ -851,8 +851,46 @@ table.data tr.is-total td {
 }
 
 @media (max-width: 919px) {
+    .header-inner {
+        /* Baris pertama harus cukup untuk merek + hamburger + avatar (tanpa wrap). */
+        gap: 14px 12px;
+    }
+
+    .brand {
+        /* basis 0: baris pertama selalu muat merek + hamburger + avatar (tanpa wrap). */
+        flex: 1 1 0;
+        min-width: 0;
+        gap: 9px;
+    }
+
+    .brand-text {
+        min-width: 0;
+    }
+
+    .brand-name {
+        font-size: 18px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .brand-tagline {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .logo-mark {
+        width: 38px;
+        height: 38px;
+        font-size: 17px;
+        flex: 0 0 auto;
+    }
+
     .site-nav {
         width: 100%;
+        /* Selalu baris tersendiri di bawah baris merek + hamburger + avatar. */
+        order: 1;
     }
 
     .site-nav.is-open {
@@ -874,6 +912,16 @@ table.data tr.is-total td {
 
     .header-actions .btn {
         flex: 1;
+    }
+
+    .nav-toggle,
+    .avatar-menu {
+        flex: 0 0 auto;
+    }
+
+    .avatar-menu {
+        /* Jika punya baris sendiri (layar sangat sempit), tetap menempel kanan. */
+        margin-left: auto;
     }
 }
 

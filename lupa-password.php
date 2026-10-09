@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $pdo = db();
-        $pdo->prepare('UPDATE users SET password_hash = ?, is_verified = 1, verified_at = COALESCE(verified_at, ?) WHERE id = ?')
+        $pdo->prepare('UPDATE users SET password_hash = ?, has_password = 1, is_verified = 1, verified_at = COALESCE(verified_at, ?) WHERE id = ?')
             ->execute([password_hash($password, PASSWORD_DEFAULT), date('Y-m-d H:i:s'), $userId]);
         $pdo->prepare('DELETE FROM otp_codes WHERE user_id = ?')->execute([$userId]);
 
